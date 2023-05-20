@@ -1,0 +1,14 @@
+{
+  "Servicios": {
+    "usuario": {
+      "host": "192.168.5.2:10002",
+      "status": "exito"
+    }
+  },
+  "PostgreSQL": {
+    "host": "jdbc:postgresql://192.168.5.48:5432/servisofts.s-erp",
+    "status": "exito"
+  },
+  "- SLog": "RealTime Log from server Servisofts",
+  "- Fecha": "2023-05-19T22:22:20.000789"
+}
