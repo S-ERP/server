@@ -1,14 +1,23 @@
 {
   "Servicios": {
-    "usuario": {
-      "host": "192.168.5.2:10002",
-      "status": "exito"
-    }
+    "facturacion": true,
+    "contabilidad": true,
+    "proyecto": true,
+    "notification": true,
+    "compra_venta": true,
+    "roles_permisos": true,
+    "sqr": true,
+    "chat": true,
+    "usuario": true,
+    "caja": true,
+    "empresa": true,
+    "inventario": true,
+    "crm": true
   },
   "PostgreSQL": {
-    "host": "jdbc:postgresql://192.168.5.48:5432/servisofts.s-erp",
+    "host": "jdbc:postgresql://192.168.5.48:5432/servisofts.serp",
     "status": "exito"
   },
   "- SLog": "RealTime Log from server Servisofts",
-  "- Fecha": "2023-05-19T22:22:20.000789"
+  "- Fecha": "2024-04-12T23:59:03.000785"
 }

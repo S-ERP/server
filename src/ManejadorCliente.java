@@ -1,5 +1,7 @@
 import org.json.JSONArray;
 import org.json.JSONObject;
+
+import Component.Tarea;
 import Servisofts.SConsole;
 import SocketCliente.SocketCliente;
 
@@ -19,9 +21,10 @@ public class ManejadorCliente {
             }
         }
         
-
         componentes(data, config);
+        Tarea.marcarTarea(data);
     }
+
 
     public static void componentes(JSONObject data, JSONObject config) {
         switch (data.getString("component")) {
@@ -45,7 +48,6 @@ public class ManejadorCliente {
                         new Email(new JSONArray().put(dataMail.getString("correo")), mailConfig, params);
                         SConsole.log("Recuperar pass", data.getJSONObject("data").toString());
                     }
-
                 }
                 break;
             }

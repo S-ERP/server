@@ -1,5 +1,5 @@
 {
-    "ss": "servisofts.s-erp",
+    "ss": "servisofts.serp",
     "socket_client": {
         "servicio": {
             "puerto": 10001,
@@ -11,25 +11,26 @@
         },
         "reconectTime": 10000
     },
+    "deeplink":"https://serp.servisofts.com",
     "files": {
-        "url": "/u01/servisoftsFiles/s-erp/"
+        "url": "/u01/servisoftsFiles/serp/"
     },
     "data_base": {
         "puerto": 5432,
         "pass": "postgres",
         "ip": "192.168.5.48",
-        "bd_name": "servisofts.s-erp",
+        "bd_name": "servisofts.serp",
         "user": "postgres"
     },
-    "nombre": "s-erp",
+    "nombre": "serp",
     "ssl": {
         "pass_jks": "Servisofts123.",
         "cert": {
             "ST": "Av Banzer",
             "C": "BO",
             "E": "servisofts.srl@gmail.com",
-            "OU": "s-erp",
-            "CN": "s-erp.servisofts.com",
+            "OU": "serp",
+            "CN": "serp.servisofts.com",
             "L": "Santa Cruz",
             "O": "SERVISOFTS S.R.L."
         },

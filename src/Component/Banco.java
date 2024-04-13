@@ -28,7 +28,7 @@ public class Banco {
 
     public static void getAll(JSONObject obj, SSSessionAbstract session) {
         try {
-            String consulta = "select get_all('" + COMPONENT + "') as json";
+            String consulta = "select get_all('" + COMPONENT + "', 'key_empresa', '"+obj.getString("key_empresa")+"') as json";
             JSONObject data = SPGConect.ejecutarConsultaObject(consulta);
             obj.put("data", data);
             obj.put("estado", "exito");

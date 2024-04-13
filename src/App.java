@@ -1,4 +1,5 @@
 import Servisofts.Servisofts;
+import Tasks.TareaTask;
 
 public class App {
     
@@ -7,6 +8,7 @@ public class App {
             Servisofts.DEBUG = false;
             Servisofts.ManejadorCliente = ManejadorCliente::onMessage;
             Servisofts.Manejador = Manejador::onMessage;
+            new TareaTask();
             Servisofts.initialize();
         } catch (Exception e) {
             e.printStackTrace();
