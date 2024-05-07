@@ -4,6 +4,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import Servisofts.SPGConect;
 import Servisofts.SUtil;
+import SharedKernel.Empresa;
 import Server.SSSAbstract.SSSessionAbstract;
 
 public class TareaComentario {
@@ -65,7 +66,7 @@ public class TareaComentario {
             data.put("key_usuario", obj.getString("key_usuario"));
             data.put("key_empresa", obj.getString("key_empresa"));
             data.put("key_tarea", tarea.getString("key"));
-
+            data.put("descripcion", (data.getString("descripcion")+"").replaceAll("'", "''"));
             SPGConect.insertArray(COMPONENT, new JSONArray().put(data));
 
             JSONObject tareaUsuarios = TareaUsuario.getAllUsuarios(tarea.getString("key"));
@@ -81,12 +82,14 @@ public class TareaComentario {
                 
                 if(tareaUsuario.getString("key_usuario").equals(obj.getString("key_usuario"))) continue;
 
+                JSONObject empresa = Empresa.getByKey(tarea.getString("key_empresa"));
+
                 new Notification().send_urlType(
                     tarea.getString("key_empresa"),
                     obj.getString("key_usuario"),
                     tareaUsuario.getString("key_usuario"),
                     "tarea_comentario_registro", 
-                    notificationData.put("tarea", tarea).put("tarea_comentario", data));
+                    notificationData.put("tarea", tarea).put("tarea_comentario", data).put("razon_social", empresa.getString("razon_social")));
 
             }
 

@@ -6,6 +6,7 @@ import org.json.JSONObject;
 import Servisofts.SConsole;
 import Servisofts.SPGConect;
 import Servisofts.SUtil;
+import SharedKernel.Empresa;
 import Server.SSSAbstract.SSSessionAbstract;
 
 public class Nota {
@@ -163,12 +164,22 @@ public class Nota {
             SPGConect.editObject("nota_usuario", notaUsuario);
 
             if(!obj.getString("key_usuario_nota").equals(obj.getString("key_usuario"))){
+
+                JSONObject empresa = Empresa.getByKey(nota.getString("key_empresa"));
+            
+
                 new Notification().send_urlType(
                     nota.getString("key_empresa"),
                     obj.getString("key_usuario"),
                     notaUsuario.getString("key_usuario"),
                     "nota_usuario_delete", 
-                    nota);
+                    new JSONObject()
+                    .put("key", nota.getString("key"))
+                    .put("key_empresa", empresa.getString("key"))
+                    .put("razon_social", empresa.getString("razon_social"))
+                    .put("observacion", nota.getString("observacion"))
+                    );
+
             }
 
 

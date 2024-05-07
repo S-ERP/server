@@ -3,6 +3,7 @@
     "facturacion": true,
     "contabilidad": true,
     "proyecto": true,
+    "banco_ganadero": true,
     "notification": true,
     "compra_venta": true,
     "roles_permisos": true,
@@ -19,5 +20,5 @@
     "status": "exito"
   },
   "- SLog": "RealTime Log from server Servisofts",
-  "- Fecha": "2024-04-12T23:59:03.000785"
+  "- Fecha": "2024-05-06T22:45:13.000792"
 }

@@ -37,6 +37,7 @@ public class Manejador {
             case Nota.COMPONENT: Nota.onMessage(obj, session); break;
             case NotaUsuario.COMPONENT: NotaUsuario.onMessage(obj, session); break;
             case Invitacion.COMPONENT: Invitacion.onMessage(obj, session); break;
+            case SolicitudQr.COMPONENT: SolicitudQr.onMessage(obj, session); break;
         }
     }
 

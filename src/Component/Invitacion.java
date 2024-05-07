@@ -2,6 +2,7 @@ package Component;
 
 import java.net.Socket;
 import java.util.Date;
+import java.util.UUID;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -143,7 +144,13 @@ public class Invitacion {
             }
 
             if(invitacion.has("key_usuario_invitado") && !invitacion.isNull("key_usuario_invitado") && invitacion.getString("key_usuario_invitado").length()>0){
-                throw new Exception("Esta invitación ya fue utilizada");
+
+                invitacion.remove("key_usuario_invitado");
+                invitacion.put("key_invitation", invitacion.getString("key"));
+                invitacion.put("key", SUtil.uuid());
+                invitacion.put("fecha_on", SUtil.now());
+                invitacion.put("key_invitation", SUtil.now());
+                SPGConect.insertObject("invitacion",invitacion);
             }
 
             if(new Date().getTime() > SUtil.parseTimestamp(invitacion.getString("fecha_fin")).getTime()){

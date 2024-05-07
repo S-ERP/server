@@ -6,6 +6,7 @@ import org.json.JSONObject;
 import Servisofts.SConfig;
 import Servisofts.SPGConect;
 import Servisofts.SUtil;
+import SharedKernel.Empresa;
 import Server.SSSAbstract.SSSessionAbstract;
 
 public class TareaUsuario {
@@ -119,13 +120,13 @@ public class TareaUsuario {
                     SConfig.getJSON().getString("deeplink")+"/tarea/post?pk=" + obj.getString("key_tarea"));*/
 
             
-
+            JSONObject empresa = Empresa.getByKey(tarea.getString("key_empresa"));
             new Notification().send_urlType(
                 tarea.getString("key_empresa"),
                 obj.getString("key_usuario"),
                 data.getString("key_usuario"),
                 "tarea_usuario_registro", 
-                tarea);
+                tarea.put("razon_social", empresa.getString("razon_social")));
 
             obj.put("data", data);
             obj.put("estado", "exito");
@@ -179,13 +180,13 @@ public class TareaUsuario {
                                 data.getString("key_usuario")));
                 
                 JSONObject tarea = Tarea.getByKey(data.getString("key_tarea"));
-
+                JSONObject empresa = Empresa.getByKey(tarea.getString("key_empresa"));
                 new Notification().send_urlType(
                         tarea.getString("key_empresa"),
                         obj.getString("key_usuario"),
                         data.getString("key_usuario"),
                         "tarea_usuario_delete", 
-                        tarea);
+                        tarea.put("razon_social", empresa.getString("razon_social")));
             }
             obj.put("data", data);
             obj.put("estado", "exito");
