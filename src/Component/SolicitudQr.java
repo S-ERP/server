@@ -3,6 +3,8 @@ package Component;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
+import java.util.UUID;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 import Servisofts.SPGConect;
@@ -12,6 +14,9 @@ import Server.SSSAbstract.SSSessionAbstract;
 
 public class SolicitudQr {
     public static final String COMPONENT = "solicitud_qr";
+
+    public static final String TIPO_CAFE = "cafe";
+    public static final String TIPO_BILLETERA = "billetera";
 
     public static void onMessage(JSONObject obj, SSSessionAbstract session) {
         switch (obj.getString("type")) {
@@ -32,20 +37,36 @@ public class SolicitudQr {
 
     public static void aprobarSolicitudQr(String qrid){
         try{
+            
             String consulta = "update "+COMPONENT+" set fecha_pago = '"+SUtil.now()+"' where qrid = '"+qrid+"'";
             SPGConect.ejecutar(consulta);
 
             JSONObject solicitud = getByQr(qrid);
-            
-            new Notification().send_urlType(
+
+            String tipo;
+            try {
+                tipo = solicitud.getString("tipo");
+            } catch (Exception e) {
+                tipo = "";
+            }
+
+            if(tipo.equals(TIPO_BILLETERA)) {
+                Billetera.registroBilleteraPagoQr(solicitud);
+            }
+            try{
+                new Notification().send_urlType(
                 solicitud.getString("key_empresa"),
                 solicitud.getString("key_usuario"),
                 solicitud.getString("key_usuario"),
-                "cafe", 
+                "qr_pagado", 
                 new JSONObject()
                 .put("key", solicitud.getString("key"))
                 .put("qrid", qrid)
                 );
+            }catch(Exception e){
+                System.err.println(e.getLocalizedMessage());
+            }
+            
 
         }catch(Exception e){
             e.printStackTrace();
@@ -146,6 +167,9 @@ public class SolicitudQr {
             solicitud_qr.put("fecha_on", SUtil.now());
             solicitud_qr.put("estado", 1);
             solicitud_qr.put("key_usuario", obj.getString("key_usuario"));
+            if(obj.has("tipo")){
+                solicitud_qr.put("tipo", obj.getString("tipo"));
+            }
             solicitud_qr.put("key_empresa", obj.getString("key_empresa"));
             solicitud_qr.put("nit", nit);
             solicitud_qr.put("razon_social", razon_social);

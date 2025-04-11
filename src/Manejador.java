@@ -2,6 +2,7 @@ import Component.*;
 import Component.RedSocial.Publicacion;
 import Component.RedSocial.PublicacionComentario;
 import Component.RedSocial.PublicacionLike;
+import Controllers.Sapi;
 import Servisofts.SConsole;
 import org.json.JSONObject;
 import Server.SSSAbstract.SSSessionAbstract;
@@ -38,6 +39,14 @@ public class Manejador {
             case NotaUsuario.COMPONENT: NotaUsuario.onMessage(obj, session); break;
             case Invitacion.COMPONENT: Invitacion.onMessage(obj, session); break;
             case SolicitudQr.COMPONENT: SolicitudQr.onMessage(obj, session); break;
+            case Sapi.COMPONENT: Sapi.onMessage(obj, session); break;
+            case Billetera.COMPONENT: Billetera.onMessage(obj, session); break;
+            case Mesh.COMPONENT: Mesh.onMessage(obj, session); break;
+            case Camera.COMPONENT: Camera.onMessage(obj, session); break;
+            case Scene.COMPONENT: Scene.onMessage(obj, session); break;
+            case Avatar.COMPONENT: Avatar.onMessage(obj, session); break;
+            case SceneMesh.COMPONENT: SceneMesh.onMessage(obj, session); break;
+            case Terreno.COMPONENT: Terreno.onMessage(obj, session); break;
         }
     }
 

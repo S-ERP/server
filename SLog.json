@@ -1,8 +1,8 @@
 {
   "Servicios": {
     "facturacion": true,
-    "contabilidad": true,
-    "proyecto": true,
+    "contabilidad": false,
+    "proyecto": false,
     "banco_ganadero": true,
     "notification": true,
     "compra_venta": true,
@@ -10,15 +10,13 @@
     "sqr": true,
     "chat": true,
     "usuario": true,
-    "caja": true,
+    "caja": false,
     "empresa": true,
-    "inventario": true,
-    "crm": true
-  },
-  "PostgreSQL": {
-    "host": "jdbc:postgresql://192.168.5.48:5432/servisofts.serp",
-    "status": "exito"
+    "drive": true,
+    "inventario": false,
+    "crm": false,
+    "status": "desconectado"
   },
   "- SLog": "RealTime Log from server Servisofts",
-  "- Fecha": "2024-05-06T22:45:13.000792"
+  "- Fecha": "2025-04-10T22:57:04.974-04:00"
 }
