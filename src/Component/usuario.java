@@ -18,28 +18,39 @@ public class usuario {
     }
 
     public static void identificacion(JSONObject obj, SSSessionAbstract session) {
+
+        try {
+
+            if (obj.has("listeners")) {
+                session.listeners = obj.getJSONArray("listeners");
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
         JSONObject send = new JSONObject();
         send.put("component", "firebase_token");
         send.put("type", "registro");
-        if(obj.has("firebase")){
+        if (obj.has("firebase")) {
             send.put("firebase", obj.getJSONObject("firebase"));
             send.put("estado", "cargando");
             SocketCliente.send("notification", send.toString());
         }
-        
-        //Firebase.identificacion(obj, session);
+
+        // Firebase.identificacion(obj, session);
     }
 
-    public static JSONObject getUsuario(String key_usuario) throws Exception{
+    public static JSONObject getUsuario(String key_usuario) throws Exception {
         JSONObject obj = new JSONObject();
         obj.put("component", "usuario");
         obj.put("version", "2.0");
         obj.put("type", "getAllKeys");
         obj.put("keys", new JSONArray().put(key_usuario));
         obj = SocketCliente.sendSinc("usuario", obj);
-        if(obj.getString("estado").equals("exito")){
+        if (obj.getString("estado").equals("exito")) {
             obj = obj.getJSONObject("data");
-            return  obj.getJSONObject(JSONObject.getNames(obj)[0]).getJSONObject("usuario");
+            return obj.getJSONObject(JSONObject.getNames(obj)[0]).getJSONObject("usuario");
         }
         return null;
     }

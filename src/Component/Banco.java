@@ -17,6 +17,9 @@ public class Banco {
             case "getByKey":
                 getByKey(obj, session);
                 break;
+            case "getAllFull":
+                getAllFull(obj, session);
+                break;
             case "registro":
                 registro(obj, session);
                 break;
@@ -28,8 +31,33 @@ public class Banco {
 
     public static void getAll(JSONObject obj, SSSessionAbstract session) {
         try {
-            String consulta = "select get_all('" + COMPONENT + "', 'key_empresa', '"+obj.getString("key_empresa")+"') as json";
+            String consulta = "select get_all('" + COMPONENT + "', 'key_empresa', '" + obj.getString("key_empresa")
+                    + "') as json";
             JSONObject data = SPGConect.ejecutarConsultaObject(consulta);
+            obj.put("data", data);
+            obj.put("estado", "exito");
+        } catch (Exception e) {
+            obj.put("estado", "error");
+            obj.put("error", e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    public static void getAllFull(JSONObject obj, SSSessionAbstract session) {
+        try {
+            String consulta = "SELECT array_to_json(array_agg(tb1.*)) as json\n" + //
+                    "FROM (\n" + //
+                    "\tselect banco.*, array_to_json(array_agg(banco_cuenta.*)) as cuentas\n" + //
+                    "\tfrom banco \n" + //
+                    "\tLEFT JOIN  banco_cuenta \n" + //
+                    "\t\tON banco.key = banco_cuenta.key_banco \n" + //
+                    "\t\tand banco_cuenta.estado > 0\n" + //
+                    "\tWHERE banco.estado > 0 \n" + //
+                    "\tAND banco.key_empresa = '" + obj.getString("key_empresa") + "'\n" + //
+                    "\tgroup by banco.key\n" + //
+                    ") tb1\n" + //
+                    "";
+            JSONArray data = SPGConect.ejecutarConsultaArray(consulta);
             obj.put("data", data);
             obj.put("estado", "exito");
         } catch (Exception e) {

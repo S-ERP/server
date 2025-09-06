@@ -11,7 +11,7 @@
         },
         "reconectTime": 10000
     },
-    "deeplink":"https://serp.servisofts.com",
+    "deeplink": "https://serp.servisofts.com",
     "files": {
         "url": "/u01/servisoftsFiles/serp/"
     },
@@ -41,5 +41,9 @@
         "port": 465,
         "email": "servisofts.srl@gmail.com",
         "password": "nyokyefgktmknlxn"
+    },
+    "wtsp": {
+        "key": "servisofts",
+        "url": "https://wtspp.servisofts.com"
     }
 }

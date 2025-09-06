@@ -8,7 +8,9 @@ import java.util.GregorianCalendar;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import Component.Wtspp;
 import JWT.JWT;
+import Server.SSSAbstract.SSServerAbstract;
 import Server.SSSAbstract.SSSessionAbstract;
 import Servisofts.SConsole;
 import Servisofts.SPGConect;
@@ -199,6 +201,44 @@ public class Sapi {
         }catch (Exception e){
             SConsole.error("Error al procesar su solicitud", e.getMessage());
             throw new HttpException(Status.BAD_REQUEST, e.getLocalizedMessage());
+        }    
+
+        // DOC-> Tengo que retornar el status 200;
+        // return "exito";
+    }
+
+    @PostMapping("/whatsapp_event")
+    public String whatsapp_event(@RequestBody String body) throws HttpException {
+        try{
+
+        
+            SConsole.log("Entro al qr");
+            JSONObject obj = new JSONObject(body);
+            obj.put("component", "whatsapp");
+            obj.put("type", "event");
+
+            String key_device = obj.getString("key_device");
+            if(!Wtspp.listener.has(key_device)){
+                return "{\"error\":\"No hay listeners para el dispositivo\"}";
+                // throw new HttpException(Status.OK, "{\"error\":\"No hay listeners para el dispositivo\"}");
+            }
+            JSONObject device = Wtspp.listener.getJSONObject(key_device);
+            String usuario;
+            for (int i = 0; i < JSONObject.getNames(device).length; i++) {
+                usuario = JSONObject.getNames(device)[i];
+                SSServerAbstract.sendUser(obj, usuario);
+            }
+
+            
+            return obj.toString();
+        }catch (Exception e){
+            
+            SConsole.error("Error al procesar su solicitud", e.getMessage());
+          //  throw new HttpException(Status.BAD_REQUEST, e.getLocalizedMessage());
+             JSONObject obj = new JSONObject(body);
+            obj.put("component", "whatsapp");
+            obj.put("type", "event");
+            return obj.toString();
         }    
 
         // DOC-> Tengo que retornar el status 200;

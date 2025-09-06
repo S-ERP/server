@@ -2,6 +2,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import Component.Tarea;
+import Component.Wtspp;
 import Servisofts.SConsole;
 import SocketCliente.SocketCliente;
 
@@ -15,16 +16,15 @@ public class ManejadorCliente {
             if (data.getString("estado").equals("error")) {
                 if (data.has("error")) {
                     SConsole.log("ERROR: " + data.get("error").toString());
-                }else{
+                } else {
                     SConsole.log("Error not found");
                 }
             }
         }
-        
+
         componentes(data, config);
         Tarea.marcarTarea(data);
     }
-
 
     public static void componentes(JSONObject data, JSONObject config) {
         switch (data.getString("component")) {
@@ -46,6 +46,19 @@ public class ManejadorCliente {
                         JSONObject params = new JSONObject();
                         params.put("codigo", dataMail.getString("codigo"));
                         new Email(new JSONArray().put(dataMail.getString("correo")), mailConfig, params);
+                        if (dataMail.has("telefono")) {
+                            Wtspp.sendMessage(dataMail.getString("telefono"),
+                                    "*Servisofts ERP*\n\n" +
+                                            "🔐 *Recuperación de contraseña*\n\n" +
+                                            "👋 Hola, para recuperar tu contraseña, por favor ingresa el siguiente código:\n\n"
+                                            +
+                                            "*Código de verificación*\n" +
+                                            "🔑 *" + dataMail.getString("codigo") + "*\n\n" +
+                                            "📌 Si no solicitaste esta recuperación, ignora este mensaje.\n\n" +
+                                            "✨ ¡Gracias por confiar en nosotros!");
+
+                        }
+
                         SConsole.log("Recuperar pass", data.getJSONObject("data").toString());
                     }
                 }
@@ -58,7 +71,7 @@ public class ManejadorCliente {
                     mailConfig.put("path", "mail/registro_exitoso.html");
                     new Email(new JSONArray().put(data.getJSONObject("data").getString("Correo")), mailConfig, null);
 
-                    if(data.has("key_rol")){
+                    if (data.has("key_rol")) {
                         JSONObject usuario_rol = new JSONObject();
                         usuario_rol.put("component", "usuarioRol");
                         usuario_rol.put("type", "registro");
@@ -71,7 +84,7 @@ public class ManejadorCliente {
                     }
 
                     SConsole.log("Registro", data.getJSONObject("data").toString());
-                }else if(data.getString("estado").equals("error")){
+                } else if (data.getString("estado").equals("error")) {
                     data.remove("error");
                 }
                 break;
