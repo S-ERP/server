@@ -263,7 +263,7 @@ public class SocketCliente extends Thread {
                 SConsole.error("ERROR: SocketCliente: OnMensaje: " + e.getMessage());
             } else {
                 this.Open = false;
-                SConsole.error("Session cliente close");
+                SConsole.error("Session cliente close",config );
                 String name = config.getJSONObject("cert").getString("OU");
                 SLog.put("Servicios." + name + ".status", "desconectado");
                 if (config.has("noSSL")) {
@@ -310,6 +310,7 @@ public class SocketCliente extends Thread {
             SocketCliente sc = SocketCliente.Clientes.get(server);
             return new SCSincroneSend(sc, timeOut).send(obj);
         } catch (Exception e) {
+            SConsole.error("Error al enviar mensaje a ", server, obj);
             e.printStackTrace();
             // try {
             // SConsole.error("[error sendsinc]", "server", server);

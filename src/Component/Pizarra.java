@@ -205,7 +205,7 @@ public class Pizarra {
                     AND pizarra.id = '%s'
                     """.formatted(obj.getString("key_empresa"), obj.getString("id_pizarra")));
 
-            obj.put("data", arr.getJSONObject(0));
+            obj.put("data", arr.optJSONObject(0));
             // String consulta = "select get_all('" + COMPONENT + "', 'key_empresa', '" +
             // obj.getString("key_empresa")
             // + "') as json";

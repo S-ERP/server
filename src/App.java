@@ -6,16 +6,16 @@ import Tasks.EmpresaTask;
 import Tasks.TareaTask;
 
 public class App {
-    
+
     public static void main(String[] args) {
         try {
-            
+            System.out.println("Versión de Java: " + System.getProperty("java.version"));
             Servisofts.DEBUG = false;
             Servisofts.ManejadorCliente = ManejadorCliente::onMessage;
             Servisofts.Manejador = Manejador::onMessage;
             Rest.addController(BancoGanaderoController.class);
             Rest.addController(Sapi.class);
-            
+
             new TareaTask();
             new EmpresaTask();
             Servisofts.initialize();
