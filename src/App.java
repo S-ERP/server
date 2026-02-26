@@ -1,3 +1,4 @@
+import Controllers.CalisteniaController;
 import Controllers.BancoGanaderoController;
 import Controllers.Sapi;
 import Servisofts.Servisofts;
@@ -15,6 +16,7 @@ public class App {
             Servisofts.Manejador = Manejador::onMessage;
             Rest.addController(BancoGanaderoController.class);
             Rest.addController(Sapi.class);
+            Rest.addController(CalisteniaController.class);
 
             new TareaTask();
             new EmpresaTask();
