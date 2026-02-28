@@ -1,6 +1,8 @@
 package Controllers;
 
 import org.json.JSONObject;
+
+import Component.SolicitudQr;
 import Servisofts.http.Exception.*;
 import Servisofts.http.annotation.*;
 import SocketCliente.SocketCliente;
@@ -66,6 +68,63 @@ public class CalisteniaController {
             JSONObject error = new JSONObject();
             error.put("estado", "error");
             error.put("mensaje", e.getMessage());
+            return error.toString();
+        }
+    }
+
+    @PostMapping("/solicitarCaja")
+    public String solicitarCaja(@RequestBody String body) throws HttpException {
+        try {
+
+            // Validar que el body no venga vacío
+            if (body == null || body.isEmpty()) {
+                JSONObject error = new JSONObject();
+                error.put("estado", "error");
+                error.put("mensaje", "Body vacío");
+                return error.toString();
+            }
+
+            JSONObject data = new JSONObject(body);
+
+            // Validar que venga la key
+            if (!data.has("key_puntoventa_serp")) {
+                JSONObject error = new JSONObject();
+                error.put("estado", "error");
+                error.put("mensaje", "Falta key_puntoventa_serp");
+                return error.toString();
+            }
+
+            String key_punto = data.getString("key_puntoventa_serp");
+
+            System.out.println("KEY PUNTO VENTA: " + key_punto);
+
+            // Construir objeto para enviar al otro servidor
+            JSONObject obT = new JSONObject();
+            obT.put("servicio", "caja"); // 👈 IMPORTANTE (no service)
+            obT.put("component", "caja");
+            obT.put("type", "getAutomatica");
+            obT.put("estado", "cargando");
+            obT.put("key_punto_venta", key_punto);
+
+            // Enviar al socket
+            JSONObject send = SocketCliente.sendSinc("caja", obT);
+
+            System.out.println("RESPUESTA SOCKET: " + send);
+
+            if (send == null) {
+                JSONObject error = new JSONObject();
+                error.put("estado", "error");
+                error.put("mensaje", "Sin respuesta del servidor caja");
+                return error.toString();
+            }
+
+            return send.toString();
+
+        } catch (Exception e) {
+            JSONObject error = new JSONObject();
+            error.put("estado", "error");
+            error.put("mensaje", e.getMessage());
+            e.printStackTrace();
             return error.toString();
         }
     }
