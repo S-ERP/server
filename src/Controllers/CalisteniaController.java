@@ -129,4 +129,65 @@ public class CalisteniaController {
         }
     }
 
+    @PostMapping("/validarAlmacen")
+    public String validarAlmacen(@RequestBody String body) {
+        JSONObject response = new JSONObject();
+
+        try {
+            System.out.println("Inicio de validación de almacén");
+
+            if (body == null || body.trim().isEmpty()) {
+                System.out.println("Body vacío");
+                response.put("estado", "error");
+                response.put("mensaje", "Body vacío");
+                return response.toString();
+            }
+            System.out.println("Body recibido correctamente");
+
+            JSONObject data = new JSONObject(body);
+
+            if (!data.has("key_almacen_serp") || data.getString("key_almacen_serp").isEmpty()) {
+                System.out.println("Falta key_almacen_serp");
+                response.put("estado", "error");
+                response.put("mensaje", "Falta key_almacen_serp");
+                return response.toString();
+            }
+
+            String keyAlmacen = data.getString("key_almacen_serp");
+            System.out.println("Key de almacén recibida: " + keyAlmacen);
+
+            JSONObject obAlmacen = new JSONObject();
+            obAlmacen.put("servicio", "inventario");
+            obAlmacen.put("component", "almacen");
+            obAlmacen.put("type", "getByKey");
+            obAlmacen.put("estado", "cargando");
+            obAlmacen.put("key", keyAlmacen);
+
+            System.out.println("Enviando solicitud al socket");
+            JSONObject send = SocketCliente.sendSinc("inventario", obAlmacen);
+
+            // Validar si existe el almacén
+            if (send != null && "exito".equalsIgnoreCase(send.optString("estado"))) {
+                JSONObject dataAlmacen = send.optJSONObject("data");
+                if (dataAlmacen != null && keyAlmacen.equals(dataAlmacen.optString("key"))) {
+                    System.out.println("Almacén encontrado");
+                    response.put("estado", "exito");
+                    response.put("mensaje", "Almacén si existe en SERP");
+                    return response.toString();
+                }
+            }
+
+            System.out.println("Almacén no encontrado");
+            response.put("estado", "error");
+            response.put("mensaje", "Almacén no existe en SERP");
+            return response.toString();
+
+        } catch (Exception e) {
+            System.out.println("Excepción capturada: " + e.getMessage());
+            response.put("estado", "error");
+            response.put("mensaje", "Error al validar el almacén");
+            e.printStackTrace();
+            return response.toString();
+        }
+    }
 }
