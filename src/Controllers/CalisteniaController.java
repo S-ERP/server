@@ -1,12 +1,9 @@
 package Controllers;
 
 import org.json.JSONObject;
-
-import Component.SolicitudQr;
 import Servisofts.http.Exception.*;
 import Servisofts.http.annotation.*;
 import SocketCliente.SocketCliente;
-import picocli.CommandLine.Model;
 
 @RestController
 @RequestMapping("/venta")
@@ -382,6 +379,78 @@ public class CalisteniaController {
 
             response.put("estado", "error");
             response.put("mensaje", "Error al validar el NIT");
+            e.printStackTrace();
+            return response.toString();
+        }
+    }
+
+    @PostMapping("/validarTipoPago")
+    public String validarTipoPago(@RequestBody String body) {
+        JSONObject response = new JSONObject();
+
+        try {
+            System.out.println("Inicio de validación de tipo de pago");
+
+            if (body == null || body.trim().isEmpty()) {
+                System.out.println("Body vacío");
+                response.put("estado", "error");
+                response.put("mensaje", "Body vacío");
+                return response.toString();
+            }
+            System.out.println("Body recibido correctamente");
+
+            JSONObject data = new JSONObject(body);
+
+            if (!data.has("key") || data.getString("key").isEmpty()) {
+                System.out.println("Falta key del tipo de pago");
+                response.put("estado", "error");
+                response.put("mensaje", "Falta Falta key del tipo de pago");
+                return response.toString();
+            }
+
+            String keyTipoPago = data.getString("key");
+            System.out.println("Key de tipo de pago recibida: " + keyTipoPago);
+
+            JSONObject ___data = new JSONObject(body);
+            JSONObject obj = new JSONObject();
+            obj.put("data", ___data);
+            obj.put("key_empresa", "1234564787987213");
+            obj.put("key_usuario", "noseestaenviandokey");
+            obj.put("key", "1");
+
+            JSONObject obTipoPago = new JSONObject();
+            obTipoPago.put("servicio", "caja"); // servicio en SERP
+            obTipoPago.put("component", "tipo_pago"); // componente correspondiente
+            obTipoPago.put("type", "getByKey");
+            obTipoPago.put("estado", "cargando");
+            obTipoPago.put("key", keyTipoPago);
+            obTipoPago.put("data", obj);
+
+            System.out.println("Enviando solicitud al socket");
+            JSONObject send = SocketCliente.sendSinc("caja", obTipoPago);
+
+            // System.out.println(sens);
+
+            // Validar si existe el tipo de pago
+            if (send != null && "exito".equalsIgnoreCase(send.optString("estado"))) {
+                JSONObject dataTipoPago = send.optJSONObject("data");
+                if (dataTipoPago != null && keyTipoPago.equals(dataTipoPago.optString("key"))) {
+                    System.out.println("Tipo de pago encontrado");
+                    response.put("estado", "exito");
+                    response.put("mensaje", "Tipo de pago si existe en SERP");
+                    return response.toString();
+                }
+            }
+
+            System.out.println("Tipo de pago no encontrado");
+            response.put("estado", "error");
+            response.put("mensaje", "Tipo de pago no existe en SERP");
+            return response.toString();
+
+        } catch (Exception e) {
+            System.out.println("Excepción capturada: " + e.getMessage());
+            response.put("estado", "error");
+            response.put("mensaje", "Error al validar el tipo de pago");
             e.printStackTrace();
             return response.toString();
         }
