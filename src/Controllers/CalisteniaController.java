@@ -350,7 +350,7 @@ public class CalisteniaController {
             requestNit.put("servicio", "crm");
             requestNit.put("component", "cliente");
             requestNit.put("type", "buscar_nit");
-            requestNit.put("key_empresa", "f894ea35-5ad1-4b61-a2d0-9294965be169");
+            requestNit.put("key_empresa", "d4118f82-0b0a-44e3-8525-73df48be69db");
             requestNit.put("nit", nit);
 
             System.out.println("Enviando solicitud al socket CRM");
