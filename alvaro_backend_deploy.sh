@@ -25,7 +25,7 @@ fi
 PUERTO="${PUERTO:-10041}"
 
 # Contraseña de sudo (siempre servisofts)
-SUDO_PASS="servisofts"
+SUDO_PASS="${SUDO_PASS:-servisofts}"
 
 # --- 1) Compilar el .jar ---
 echo -e "${BLUE}[1/4] Compilando server.jar...${NC}"

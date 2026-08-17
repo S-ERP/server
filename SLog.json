@@ -14,8 +14,9 @@
     "drive": true,
     "empresa": true,
     "inventario": true,
-    "crm": false
+    "crm": false,
+    "status": "desconectado"
   },
   "- SLog": "RealTime Log from server Servisofts",
-  "- Fecha": "2026-08-17T16:41:47.119-04:00"
+  "- Fecha": "2026-08-17T18:56:38.064-04:00"
 }
