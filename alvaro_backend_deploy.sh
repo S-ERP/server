@@ -52,10 +52,10 @@ echo -e "${GREEN}server.jar subido.${NC}"
 # Detiene y luego inicia el servicio con el nuevo jar
 echo -e "${CYAN}[4/4] Deteniendo servicio...${NC}"
 
-printf '%s\n' "$SUDO_PASS" | ssh -tt "$SSH_HOST" "cd $REMOTE_DIR && ./servisofts.sh down"
+printf '%s\n1\n%s\n' "$SUDO_PASS" "$SUDO_PASS" | ssh -tt "$SSH_HOST" "cd ~/servicios/serp && ./servisofts.sh down"
 
 echo -e "${CYAN}Iniciando servicio con el nuevo jar...${NC}"
 
-printf '%s\n' "$SUDO_PASS" | ssh -tt "$SSH_HOST" "cd $REMOTE_DIR && ./servisofts.sh up -d"
+printf '%s\n1\n%s\n' "$SUDO_PASS" "$SUDO_PASS" | ssh -tt "$SSH_HOST" "cd ~/servicios/serp && ./servisofts.sh up -d"
 
-echo -e "${GREEN}Listo. Servicio reiniciado con el jar nuevo.${NC}"
+echo -e "${GREEN}✓ Deploy completado. Servicio reiniciado con el jar nuevo.${NC}"
