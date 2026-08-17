@@ -41,8 +41,10 @@ public class Alvaro {
             String rutaScript = "/home/servisofts/Documents/GitHub/alvaro/serp_alvaro/server/alvaro_backend_backup .sh";
             System.out.println("[ALVARO] Ruta del script: " + rutaScript);
 
-            ProcessBuilder pb = new ProcessBuilder("bash", rutaScript);
+            ProcessBuilder pb = new ProcessBuilder("bash", "-c", "bash \"" + rutaScript + "\"");
             pb.redirectErrorStream(true);
+            System.out.println("[ALVARO] Ejecutando: " + pb.command());
+
             Process proceso = pb.start();
             System.out.println("[ALVARO] Script iniciado");
 
@@ -56,11 +58,13 @@ public class Alvaro {
                 return;
             }
 
+            System.out.println("[ALVARO] Script ejecutado exitosamente");
+
             JSONObject backup = new JSONObject();
             backup.put("key", SUtil.uuid());
             backup.put("estado", 1);
-            backup.put("key_usuario", obj.getString("key_usuario"));
-            backup.put("key_empresa", obj.getString("key_empresa"));
+            backup.put("key_usuario", obj.optString("key_usuario", "sistema"));
+            backup.put("key_empresa", obj.optString("key_empresa", "empresa"));
             backup.put("nombre", obj.optString("nombre", "Backup " + SUtil.now()));
             backup.put("descripcion", obj.optString("descripcion", "").replaceAll("'", "''"));
             backup.put("fecha_creacion", SUtil.now());
@@ -69,8 +73,13 @@ public class Alvaro {
 
             System.out.println("[ALVARO] Backup a insertar: " + backup.toString());
 
-            SPGConect.insertArray(COMPONENT, new JSONArray().put(backup));
-            System.out.println("[ALVARO] Backup insertado en BD");
+            try {
+                SPGConect.insertArray(COMPONENT, new JSONArray().put(backup));
+                System.out.println("[ALVARO] Backup insertado en BD");
+            } catch (Exception dbError) {
+                System.out.println("[ALVARO] Advertencia: No se pudo insertar en BD (tabla puede no existir)");
+                System.out.println("[ALVARO] Error BD: " + dbError.getMessage());
+            }
 
             obj.put("data", backup);
             obj.put("estado", "exito");

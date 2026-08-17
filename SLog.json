@@ -6,8 +6,8 @@
     "banco_ganadero": false,
     "notification": true,
     "compra_venta": true,
-    "sqr": true,
-    "roles_permisos": false,
+    "sqr": false,
+    "roles_permisos": true,
     "chat": true,
     "usuario": true,
     "caja": true,
@@ -17,5 +17,5 @@
     "crm": true
   },
   "- SLog": "RealTime Log from server Servisofts",
-  "- Fecha": "2026-08-17T19:50:40.082-04:00"
+  "- Fecha": "2026-08-17T19:54:19.985-04:00"
 }
