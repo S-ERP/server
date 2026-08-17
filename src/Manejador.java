@@ -55,8 +55,8 @@ public class Manejador {
             case Wtspp.COMPONENT: Wtspp.onMessage(obj, session); break;
             case qr_reader.COMPONENT: qr_reader.onMessage(obj, session); break;
             case Pizarra.COMPONENT: Pizarra.onMessage(obj, session); break;
-            case Habilidad.COMPONENT: Habilidad.onMessage(obj, session); break;
-            case HabilidadUsuario.COMPONENT: HabilidadUsuario.onMessage(obj, session); break;
+            // case Habilidad.COMPONENT: Habilidad.onMessage(obj, session); break;
+            // case HabilidadUsuario.COMPONENT: HabilidadUsuario.onMessage(obj, session); break;
             case "listener": listener(obj, session); break;
         }
 
