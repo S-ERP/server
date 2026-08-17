@@ -46,14 +46,14 @@ BACKUP_DATE=$(date +%Y-%m-%d_%H%M%S)
 
 # --- 3) Crear una copia del build actual en el servidor (respaldo con fecha) ---
 echo -e "${BLUE}[3/5] Respaldando build remoto (fecha: $BACKUP_DATE)...${NC}"
-ssh "$SSH_HOST" "cp -r $REMOTE_DIR/build $REMOTE_DIR/build_$BACKUP_DATE"
+ssh "$SSH_HOST" "cp -r $REMOTE_FRONTEND_DIR/build $REMOTE_FRONTEND_DIR/build_$BACKUP_DATE"
 
 echo -e "${GREEN}Backup creado: build_$BACKUP_DATE${NC}"
 
 # --- 4) Subir el build nuevo al servidor ---
 # rsync --delete deja el remoto identico al build local (borra archivos viejos que ya no existen)
 echo -e "${CYAN}[4/5] Subiendo build nuevo...${NC}"
-rsync -avz --delete build/ "$SSH_HOST:$REMOTE_DIR/build/"
+rsync -avz --delete build/ "$SSH_HOST:$REMOTE_FRONTEND_DIR/build/"
 
 echo -e "${GREEN}build subido.${NC}"
 
