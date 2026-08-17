@@ -41,4 +41,20 @@ echo -e "${CYAN}[2/4] Respaldando server.jar remoto (fecha: $BACKUP_DATE)...${NC
 ssh "$SSH_HOST" "cp $REMOTE_DIR/server.jar $REMOTE_DIR/server_$BACKUP_DATE.jar"
 
 echo -e "${GREEN}Backup creado: server_$BACKUP_DATE.jar${NC}"
- 
+
+# --- 3) Subir el jar nuevo ---
+echo -e "${CYAN}[3/4] Subiendo server.jar nuevo...${NC}"
+scp ./server.jar "$SSH_HOST:$REMOTE_DIR/"
+
+echo -e "${GREEN}server.jar subido.${NC}"
+
+# --- 4) Reiniciar el servicio ---
+# El servicio corre bajo systemd/supervisor: al matar el proceso del puerto, se relanza solo
+# con el jar que se acaba de subir. Equivalente remoto de sbin/kill.sh.
+echo -e "${CYAN}[4/4] Reiniciando servicio (puerto $PUERTO)...${NC}"
+
+REMOTE_KILL_CMD='PID=$(sudo ss -lptn "sport = :'"$PUERTO"'" | grep -oP "pid=\K\d+"); if [ -n "$PID" ]; then sudo kill -9 $PID; echo "Proceso $PID terminado, el servicio deberia relanzarse solo."; else echo "No se encontro ningun proceso escuchando en el puerto '"$PUERTO"'."; fi'
+
+printf '%s\n' "$SUDO_PASS" | ssh -tt "$SSH_HOST" "$REMOTE_KILL_CMD"
+
+echo -e "${GREEN}Listo. Servicio reiniciado con el jar nuevo.${NC}"

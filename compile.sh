@@ -22,4 +22,3 @@ echo "" >> META-INF/MANIFEST.MF
 cd ../
 javac -cp "src/:lib/*:lib/lib/*" src/App.java -d bin
 jar cfM "${path_dir}.jar" -C bin/ .
-rm -fr bin
