@@ -198,12 +198,20 @@ public class Pizarra {
 
             JSONArray arr = SPGConect.array_to_json("""
                     SELECT
-                        *
+                        pizarra.*,
+                        (
+                            select to_json(pizarra_usuario.*)
+                            FROM pizarra_usuario
+                            WHERE pizarra_usuario.key_pizarra = pizarra.key
+                            AND pizarra_usuario.estado > 0
+                            AND key_usuario = '%s'
+                        ) as pizarra_usuario
                     FROM pizarra
                     WHERE pizarra.estado > 0
                     AND pizarra.key_empresa = '%s'
                     AND pizarra.id = '%s'
-                    """.formatted(obj.getString("key_empresa"), obj.getString("id_pizarra")));
+                    """.formatted(obj.optString("key_usuario", ""), obj.getString("key_empresa"),
+                    obj.getString("id_pizarra")));
 
             obj.put("data", arr.optJSONObject(0));
             // String consulta = "select get_all('" + COMPONENT + "', 'key_empresa', '" +

@@ -32,13 +32,17 @@ public class SolicitudQr {
             case "getQr":
                 new SolicitudQr().getQr(obj, session);
                 break;
+            case "getQrPasarela":
+                new SolicitudQr().getQr(obj, session);
+                break;
         }
     }
 
-    public static void aprobarSolicitudQr(String qrid){
-        try{
-            
-            String consulta = "update "+COMPONENT+" set fecha_pago = '"+SUtil.now()+"' where qrid = '"+qrid+"'";
+    public static void aprobarSolicitudQr(String qrid) {
+        try {
+
+            String consulta = "update " + COMPONENT + " set fecha_pago = '" + SUtil.now() + "' where qrid = '" + qrid
+                    + "'";
             SPGConect.ejecutar(consulta);
 
             JSONObject solicitud = getByQr(qrid);
@@ -50,29 +54,28 @@ public class SolicitudQr {
                 tipo = "";
             }
 
-            if(tipo.equals(TIPO_BILLETERA)) {
+            if (tipo.equals(TIPO_BILLETERA)) {
                 Billetera.registroBilleteraPagoQr(solicitud);
             }
-            try{
+            try {
                 new Notification().send_urlType(
-                solicitud.getString("key_empresa"),
-                solicitud.getString("key_usuario"),
-                solicitud.getString("key_usuario"),
-                "qr_pagado", 
-                new JSONObject()
-                .put("key", solicitud.getString("key"))
-                .put("qrid", qrid)
-                );
-            }catch(Exception e){
+                        solicitud.getString("key_empresa"),
+                        solicitud.getString("key_usuario"),
+                        solicitud.getString("key_usuario"),
+                        "qr_pagado",
+                        new JSONObject()
+                                .put("key", solicitud.getString("key"))
+                                .put("qrid", qrid));
+            } catch (Exception e) {
                 System.err.println(e.getLocalizedMessage());
             }
-            
 
-        }catch(Exception e){
+        } catch (Exception e) {
             e.printStackTrace();
         }
-        
+
     }
+
     public static JSONObject getByQr(String qrId) {
         try {
             String consulta = "select get_by('" + COMPONENT + "', 'qrid','" + qrId + "') as json";
@@ -80,11 +83,11 @@ public class SolicitudQr {
         } catch (Exception e) {
             e.printStackTrace();
             return null;
-            
+
         }
     }
 
-        public static void getByQr(JSONObject obj, SSSessionAbstract session) {
+    public static void getByQr(JSONObject obj, SSSessionAbstract session) {
         try {
             String consulta = "select get_by('" + COMPONENT + "', 'qrid','" + obj.getString("qrid") + "') as json";
             JSONObject data = SPGConect.ejecutarConsultaObject(consulta);
@@ -98,8 +101,7 @@ public class SolicitudQr {
 
             if (send.getString("estado").equals("exito")) {
                 data.put("qrImage", send.getJSONObject("data").getString("qrimage"));
-            } 
-
+            }
 
             obj.put("data", data);
             obj.put("estado", "exito");
@@ -113,16 +115,20 @@ public class SolicitudQr {
     public static void getAll(JSONObject obj, SSSessionAbstract session) {
         try {
             String consulta = "select get_all('" + COMPONENT + "') as json";
-            
-            if(obj.has("key_empresa") && !obj.isNull("key_empresa")){
-                consulta = "select get_all('" + COMPONENT + "', 'key_empresa', '"+obj.getString("key_empresa")+"') as json";
+
+            if (obj.has("key_empresa") && !obj.isNull("key_empresa")) {
+                consulta = "select get_all('" + COMPONENT + "', 'key_empresa', '" + obj.getString("key_empresa")
+                        + "') as json";
             }
-            
-            if(obj.has("key_empresa") && !obj.isNull("key_empresa") && obj.has("tipo") && !obj.isNull("tipo")){
-                consulta = "select get_solicitud_qr_pagados('"+obj.getString("key_empresa")+"', '"+obj.getString("tipo")+"') as json";
+
+            if (obj.has("key_empresa") && !obj.isNull("key_empresa") && obj.has("tipo") && !obj.isNull("tipo")) {
+                consulta = "select get_solicitud_qr_pagados('" + obj.getString("key_empresa") + "', '"
+                        + obj.getString("tipo") + "') as json";
             }
-            if(obj.has("key_empresa") && !obj.isNull("key_empresa") && obj.has("key_usuario") && !obj.isNull("key_usuario")){
-                consulta = "select get_solicitud_qr_pagados_usuario('"+obj.getString("key_empresa")+"', '"+obj.getString("key_usuario")+"') as json";
+            if (obj.has("key_empresa") && !obj.isNull("key_empresa") && obj.has("key_usuario")
+                    && !obj.isNull("key_usuario")) {
+                consulta = "select get_solicitud_qr_pagados_usuario('" + obj.getString("key_empresa") + "', '"
+                        + obj.getString("key_usuario") + "') as json";
             }
             JSONObject data = SPGConect.ejecutarConsultaObject(consulta);
             obj.put("data", data);
@@ -142,6 +148,10 @@ public class SolicitudQr {
                 obj.put("error", "key_usuario");
                 return;
             }
+
+            // Si no encontramos ponemos el de servisofts, esto se tendria q validar y no
+            // usar el de servisofts solo se quedo para no fregar el dona para un cafe
+            String key_bg_profile = obj.optString("key_bg_profile", "a746fbc3-6c0b-48ea-9069-a08f56e745d0");
 
             String nit = "S/N";
             if (obj.has("nit") && !obj.isNull("nit")) {
@@ -167,26 +177,28 @@ public class SolicitudQr {
             solicitud_qr.put("fecha_on", SUtil.now());
             solicitud_qr.put("estado", 1);
             solicitud_qr.put("key_usuario", obj.getString("key_usuario"));
-            if(obj.has("tipo")){
+            if (obj.has("tipo")) {
                 solicitud_qr.put("tipo", obj.getString("tipo"));
             }
             solicitud_qr.put("key_empresa", obj.getString("key_empresa"));
             solicitud_qr.put("nit", nit);
             solicitud_qr.put("razon_social", razon_social);
-            if(obj.has("descripcion") && !obj.isNull("descripcion")){
+            if (obj.has("descripcion") && !obj.isNull("descripcion")) {
                 solicitud_qr.put("descripcion", obj.getString("descripcion"));
             }
             solicitud_qr.put("correos", correos);
             solicitud_qr.put("fecha_inicio", SUtil.now());
             solicitud_qr.put("fecha_vencimiento", formatoJson.format(cal.getTime()));
             solicitud_qr.put("monto", obj.getDouble("monto"));
+            solicitud_qr.put("key_bg_profile", key_bg_profile);
+            solicitud_qr.put("data", obj.optJSONObject("data"));
 
             SPGConect.insertObject("solicitud_qr", solicitud_qr);
 
             JSONObject send = new JSONObject();
             send.put("component", "bg_payment_order");
             send.put("type", "registro");
-            send.put("key_bg_profile", "a746fbc3-6c0b-48ea-9069-a08f56e745d0");
+            send.put("key_bg_profile", key_bg_profile);
 
             send.put("monto", obj.getDouble("monto"));
             send.put("glosa", obj.getString("descripcion"));

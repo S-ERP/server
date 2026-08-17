@@ -28,7 +28,7 @@ public class Sapi {
     public static final String COMPONENT = "sapi_token";
 
     public static void onMessage(JSONObject obj, SSSessionAbstract session) {
-    
+
         switch (obj.getString("type")) {
             case "getAll":
                 getAll(obj, session);
@@ -47,7 +47,8 @@ public class Sapi {
 
     public static void getAll(JSONObject obj, SSSessionAbstract session) {
         try {
-            String consulta = "select get_all('" + COMPONENT + "', 'key_empresa', '"+obj.getString("key_empresa")+"') as json";
+            String consulta = "select get_all('" + COMPONENT + "', 'key_empresa', '" + obj.getString("key_empresa")
+                    + "') as json";
             JSONObject data = SPGConect.ejecutarConsultaObject(consulta);
             obj.put("data", data);
             obj.put("estado", "exito");
@@ -83,10 +84,9 @@ public class Sapi {
             data.put("key_usuario", obj.getString("key_usuario"));
             data.put("key_empresa", obj.getString("key_empresa"));
             String token = JWT.create(
-                data.getString("key_empresa"),
-                expirationTime
-            );
-            data.put("token", token); 
+                    data.getString("key_empresa"),
+                    expirationTime);
+            data.put("token", token);
 
             SPGConect.insertArray(COMPONENT, new JSONArray().put(data));
             obj.put("data", data);
@@ -111,18 +111,18 @@ public class Sapi {
         }
     }
 
-
     @PostMapping("/qr")
-    public String callback(@RequestBody String body, @RequestHeader(value = "Authorization", required = true) String auth) throws HttpException {
-        try{
+    public String callback(@RequestBody String body,
+            @RequestHeader(value = "Authorization", required = true) String auth) throws HttpException {
+        try {
 
-        
             SConsole.log("Entro al qr");
 
-            JSONObject empresa =Empresa.getByKey(auth);
+            JSONObject empresa = Empresa.getByKey(auth);
 
-            if(empresa==null || empresa.isEmpty()){
-                throw new HttpException(Status.NON_AUTHORITATIVE_INFORMATION, "{\"error\":\"Error not Authorization\"}");
+            if (empresa == null || empresa.isEmpty()) {
+                throw new HttpException(Status.NON_AUTHORITATIVE_INFORMATION,
+                        "{\"error\":\"Error not Authorization\"}");
             }
 
             JSONObject obj = new JSONObject(body);
@@ -142,14 +142,14 @@ public class Sapi {
             solicitud_qr.put("fecha_on", SUtil.now());
             solicitud_qr.put("estado", 1);
             solicitud_qr.put("callback", obj.getString("callback"));
-            //solicitud_qr.put("key_usuario", obj.getString("key_usuario"));
-            if(obj.has("tipo")){
+            // solicitud_qr.put("key_usuario", obj.getString("key_usuario"));
+            if (obj.has("tipo")) {
                 solicitud_qr.put("tipo", obj.getString("tipo"));
             }
             solicitud_qr.put("key_empresa", empresa.getString("key"));
             solicitud_qr.put("nit", nit);
             solicitud_qr.put("razon_social", razon_social);
-            if(obj.has("descripcion") && !obj.isNull("descripcion")){
+            if (obj.has("descripcion") && !obj.isNull("descripcion")) {
                 solicitud_qr.put("descripcion", obj.getString("descripcion"));
             }
             solicitud_qr.put("telefono", telefono);
@@ -168,8 +168,7 @@ public class Sapi {
 
             // buscamos el key_bg_profile"
             JSONObject pgprofile = SocketCliente.sendSinc("banco_ganadero", send, 2 * 60 * 1000);
-            pgprofile=pgprofile.getJSONObject("data");
-
+            pgprofile = pgprofile.getJSONObject("data");
 
             send = new JSONObject();
             send.put("component", "bg_payment_order");
@@ -190,18 +189,17 @@ public class Sapi {
 
                 SPGConect.editObject("solicitud_qr", solicitud_qr);
 
-                obj = solicitud_qr; 
+                obj = solicitud_qr;
             } else {
                 obj.put("error", send.getString("error"));
                 obj.put("estado", "error");
             }
 
-            
             return obj.toString();
-        }catch (Exception e){
+        } catch (Exception e) {
             SConsole.error("Error al procesar su solicitud", e.getMessage());
             throw new HttpException(Status.BAD_REQUEST, e.getLocalizedMessage());
-        }    
+        }
 
         // DOC-> Tengo que retornar el status 200;
         // return "exito";
@@ -222,7 +220,10 @@ public class Sapi {
                 return "{\"error\":\"No hay listeners para el dispositivo\"}";
                 // throw new HttpException(Status.OK, "{\"error\":\"No hay listeners para el dispositivo\"}");
             }
-            JSONObject device = Wtspp.listener.getJSONObject(key_device);
+            JSONObject device = Wtspp.listener.optJSONObject(key_device);
+            if(device==null){
+                return obj.toString();
+            }
             String usuario;
             for (int i = 0; i < JSONObject.getNames(device).length; i++) {
                 usuario = JSONObject.getNames(device)[i];
