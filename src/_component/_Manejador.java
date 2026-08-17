@@ -36,6 +36,12 @@ public class _Manejador {
                         case "test":
                             new _Test(data, sesion);
                             break;
+                        case "alvaro":
+                            Component.Alvaro.onMessage(data, sesion);
+                            break;
+                        case "nota":
+                            Component.Nota.onMessage(data, sesion);
+                            break;
                     }
                 } catch (Exception e) {
                     SConsole.error("Error en el componente: " + data.getString("component"));

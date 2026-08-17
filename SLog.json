@@ -7,16 +7,15 @@
     "notification": true,
     "compra_venta": true,
     "sqr": true,
-    "roles_permisos": true,
+    "roles_permisos": false,
     "chat": true,
     "usuario": true,
     "caja": true,
     "drive": true,
     "empresa": true,
     "inventario": true,
-    "crm": false,
-    "status": "desconectado"
+    "crm": true
   },
   "- SLog": "RealTime Log from server Servisofts",
-  "- Fecha": "2026-08-17T18:56:38.064-04:00"
+  "- Fecha": "2026-08-17T19:50:40.082-04:00"
 }
