@@ -49,12 +49,13 @@ scp ./server.jar "$SSH_HOST:$REMOTE_DIR/"
 echo -e "${GREEN}server.jar subido.${NC}"
 
 # --- 4) Reiniciar el servicio ---
-# El servicio corre bajo systemd/supervisor: al matar el proceso del puerto, se relanza solo
-# con el jar que se acaba de subir. Equivalente remoto de sbin/kill.sh.
-echo -e "${CYAN}[4/4] Reiniciando servicio (puerto $PUERTO)...${NC}"
+# Detiene y luego inicia el servicio con el nuevo jar
+echo -e "${CYAN}[4/4] Deteniendo servicio...${NC}"
 
-REMOTE_KILL_CMD='PID=$(sudo ss -lptn "sport = :'"$PUERTO"'" | grep -oP "pid=\K\d+"); if [ -n "$PID" ]; then sudo kill -9 $PID; echo "Proceso $PID terminado, el servicio deberia relanzarse solo."; else echo "No se encontro ningun proceso escuchando en el puerto '"$PUERTO"'."; fi'
+printf '%s\n' "$SUDO_PASS" | ssh -tt "$SSH_HOST" "cd $REMOTE_DIR && ./servisofts.sh down"
 
-printf '%s\n' "$SUDO_PASS" | ssh -tt "$SSH_HOST" "$REMOTE_KILL_CMD"
+echo -e "${CYAN}Iniciando servicio con el nuevo jar...${NC}"
+
+printf '%s\n' "$SUDO_PASS" | ssh -tt "$SSH_HOST" "cd $REMOTE_DIR && ./servisofts.sh up -d"
 
 echo -e "${GREEN}Listo. Servicio reiniciado con el jar nuevo.${NC}"
