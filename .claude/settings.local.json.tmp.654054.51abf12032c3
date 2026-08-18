@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /home/servisofts/Documents/GitHub/S-ERP/server -name \"Habilidad*.java\" -type f)",
+      "Read(//home/servisofts/Documents/GitHub/S-ERP/server/**)",
+      "Read(//home/servisofts/Documents/GitHub/alvaro/facturacion/server/**)",
+      "Bash(chmod +x /home/servisofts/Documents/GitHub/alvaro/serp_alvaro/server/compile.sh)",
+      "Bash(ssh servisofts@192.168.2.5 \"find ~/servicios/serp -name 'servisofts.sh' -o -name '*.sh' | grep -E '\\(servisofts|down|up\\)' | head -20\")",
+      "Bash(chmod +x /home/servisofts/Documents/GitHub/alvaro/serp_alvaro/server/alvaro_frontend_*.sh)",
+      "Bash(ssh servisofts@192.168.2.5 \"find ~/servicios/serp -type d -name 'build' 2>/dev/null\")",
+      "Read(//home/servisofts/Documents/GitHub/alvaro/app/src/Components/Popups/**)",
+      "Read(//home/servisofts/Documents/GitHub/alvaro/app/src/Model/serp/nota/**)",
+      "Bash(find /home/servisofts/Documents/GitHub/alvaro/app -path \"*Model*\" -name \"*nota*\" -o -path \"*Model*\" -type d | head -20)",
+      "Read(//home/servisofts/Documents/GitHub/alvaro/app/**)",
+      "Bash(mkdir -p /home/servisofts/Documents/GitHub/alvaro/app/src/Model/serp/alvaro)",
+      "Bash(grep -E \"\\\\.\\(java|txt\\)$\")",
+      "Bash(find /home/servisofts/Documents/GitHub/alvaro -name \"*.sql\" | head -5)",
+      "Read(//home/servisofts/Documents/GitHub/alvaro/**)",
+      "Bash(bash \"/home/servisofts/Documents/GitHub/alvaro/serp_alvaro/server/alvaro_backend_backup .sh\")",
+      "Bash(node test_eliminar_backup.js)",
+      "Bash(bash /tmp/claude-1000/-home-servisofts-Documents-GitHub-alvaro-serp-alvaro-server/208808f0-de60-44e3-8606-01976b7c563d/scratchpad/eliminar_backup_real.sh)",
+      "Bash(ssh servisofts@192.168.2.5 \"rm -f /home/servisofts/servicios/serp/entornos/serp/servicios/serp/server.jar_2026-08-17_195014 /home/servisofts/servicios/serp/entornos/serp/servicios/serp/server.jar_2026-08-17_195106 /home/servisofts/servicios/serp/entornos/serp/servicios/serp/server.jar_2026-08-17_195109 /home/servisofts/servicios/serp/entornos/serp/servicios/serp/server.jar_2026-08-17_195303 /home/servisofts/servicios/serp/entornos/serp/servicios/serp/server.jar_2026-08-17_195428 /home/servisofts/servicios/serp/entornos/serp/servicios/serp/server.jar_2026-08-17_195845 /home/servisofts/servicios/serp/entornos/serp/servicios/serp/server.jar_2026-08-17_224025 /home/servisofts/servicios/serp/entornos/serp/servicios/serp/server.jar_2026-08-17_224026 /home/servisofts/servicios/serp/entornos/serp/servicios/serp/server.jar_2026-08-17_232754 /home/servisofts/servicios/serp/entornos/serp/servicios/serp/server.jar_2026-08-17_232756 /home/servisofts/servicios/serp/entornos/serp/servicios/serp/server.jar_2026-08-17_232805 /home/servisofts/servicios/serp/entornos/serp/servicios/serp/server.jar_2026-08-17_232806 /home/servisofts/servicios/serp/entornos/serp/servicios/serp/server.jar_2026-08-18_000750 /home/servisofts/servicios/serp/entornos/serp/servicios/serp/server.jar_2026-08-18_000936 /home/servisofts/servicios/serp/entornos/serp/servicios/serp/server.jar_2026-08-18_001141 /home/servisofts/servicios/serp/entornos/serp/servicios/serp/server_2026-08-17_183437.jar\")",
+      "Bash(ssh servisofts@192.168.2.5 \"ls -lh /home/servisofts/servicios/serp/entornos/serp/servicios/serp/server*.jar 2>/dev/null | wc -l\")",
+      "Bash(javac -cp \"bin:lib/*\" src/Component/Alvaro.java -d bin)",
+      "Bash(git add *)",
+      "Bash(git commit -m 'Fix: Add configurable environment support for Alvaro *)",
+      "Bash(git commit -m 'Fix: Remove SSH dependency, use local file access *)",
+      "Bash(./compile.sh)",
+      "Bash(git reset *)",
+      "Bash(git commit -m 'Clean: Remove unused SSH-based methods from Alvaro *)",
+      "Bash(git commit -m 'Fix: Add placeholder methods for unimplemented Alvaro features *)"
+    ],
+    "additionalDirectories": [
+      "/home/servisofts/Documents/GitHub/alvaro/app/src/Model/serp",
+      "/home/servisofts/Documents/GitHub/alvaro/app/src/Pages"
+    ]
+  }
+}

@@ -15,6 +15,27 @@ public class Alvaro {
             case "crearBackupBackend":
                 crearBackupBackend(obj, session);
                 break;
+            case "crearBackupFrontend":
+                respuestaNoImplementada(obj, "crearBackupFrontend");
+                break;
+            case "backend_ver_backup":
+                respuestaNoImplementada(obj, "backend_ver_backup");
+                break;
+            case "frontend_ver_backup":
+                respuestaNoImplementada(obj, "frontend_ver_backup");
+                break;
+            case "eliminarBackupBackend":
+                respuestaNoImplementada(obj, "eliminarBackupBackend");
+                break;
+            case "restaurarBackupBackend":
+                respuestaNoImplementada(obj, "restaurarBackupBackend");
+                break;
+            case "eliminarBackupFrontend":
+                respuestaNoImplementada(obj, "eliminarBackupFrontend");
+                break;
+            case "restaurarBackupFrontend":
+                respuestaNoImplementada(obj, "restaurarBackupFrontend");
+                break;
             case "infoServidor":
                 infoServidor(obj, session);
                 break;
@@ -104,6 +125,12 @@ public class Alvaro {
         final String[] unidades = { "B", "KB", "MB", "GB" };
         int indice = (int) (Math.log10(bytes) / Math.log10(1024));
         return String.format("%.2f %s", bytes / Math.pow(1024, indice), unidades[indice]);
+    }
+
+    private static void respuestaNoImplementada(JSONObject obj, String metodo) {
+        obj.put("estado", "error");
+        obj.put("error", "Método '" + metodo + "' no implementado");
+        System.out.println("[ALVARO] Método no implementado: " + metodo);
     }
 
     public static void infoServidor(JSONObject obj, SSSessionAbstract session) {
