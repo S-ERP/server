@@ -39,6 +39,7 @@ public class Alvaro {
             System.out.println("[ALVARO] Datos recibidos: " + obj.toString());
 
             String rutaScript = "/home/servisofts/Documents/GitHub/alvaro/serp_alvaro/server/alvaro_backend_backup .sh";
+            String rutaBackups = "/home/servisofts/servicios/serp/entornos/serp/servicios/serp";
             System.out.println("[ALVARO] Ruta del script: " + rutaScript);
 
             ProcessBuilder pb = new ProcessBuilder("bash", "-c", "bash \"" + rutaScript + "\"");
@@ -60,16 +61,29 @@ public class Alvaro {
 
             System.out.println("[ALVARO] Script ejecutado exitosamente");
 
+            String nombreBackup = "server.jar_" + new java.text.SimpleDateFormat("yyyy-MM-dd_HHmmss").format(new java.util.Date());
+            String rutaCompleta = rutaBackups + "/" + nombreBackup;
+
             JSONObject backup = new JSONObject();
             backup.put("key", SUtil.uuid());
             backup.put("estado", 1);
             backup.put("key_usuario", obj.optString("key_usuario", "sistema"));
             backup.put("key_empresa", obj.optString("key_empresa", "empresa"));
-            backup.put("nombre", obj.optString("nombre", "Backup " + SUtil.now()));
+            backup.put("nombre", nombreBackup);
+            backup.put("ruta", rutaCompleta);
             backup.put("descripcion", obj.optString("descripcion", "").replaceAll("'", "''"));
             backup.put("fecha_creacion", SUtil.now());
             backup.put("fecha_backup", SUtil.now());
-            backup.put("tamaño", obj.optString("tamaño", "0"));
+
+            java.io.File archivoBackup = new java.io.File(rutaCompleta);
+            if (archivoBackup.exists()) {
+                long tamaño = archivoBackup.length();
+                backup.put("tamaño", formatearTamaño(tamaño));
+                System.out.println("[ALVARO] Archivo backup encontrado: " + nombreBackup + " (" + formatearTamaño(tamaño) + ")");
+            } else {
+                backup.put("tamaño", "0");
+                System.out.println("[ALVARO] Advertencia: Archivo backup no encontrado en: " + rutaCompleta);
+            }
 
             System.out.println("[ALVARO] Backup a insertar: " + backup.toString());
 
@@ -83,7 +97,7 @@ public class Alvaro {
 
             obj.put("data", backup);
             obj.put("estado", "exito");
-            obj.put("mensaje", "Backup creado exitosamente");
+            obj.put("mensaje", "Backup creado exitosamente: " + nombreBackup);
             System.out.println("[ALVARO] ========== crearBackup COMPLETADO ==========");
         } catch (Exception e) {
             obj.put("estado", "error");
@@ -93,15 +107,62 @@ public class Alvaro {
         }
     }
 
+    private static String formatearTamaño(long bytes) {
+        if (bytes <= 0) return "0 B";
+        final String[] unidades = { "B", "KB", "MB", "GB" };
+        int indice = (int) (Math.log10(bytes) / Math.log10(1024));
+        return String.format("%.2f %s", bytes / Math.pow(1024, indice), unidades[indice]);
+    }
+
     public static void listarBackups(JSONObject obj, SSSessionAbstract session) {
         try {
-            String consulta = "select get_all_backups_by_empresa('" + obj.getString("key_empresa") + "') as json";
-            JSONObject data = SPGConect.ejecutarConsultaObject(consulta);
-            obj.put("data", data);
+            System.out.println("[ALVARO] Listando backups...");
+            String rutaBackups = "/home/servisofts/servicios/serp/entornos/serp/servicios/serp";
+
+            java.io.File directorio = new java.io.File(rutaBackups);
+            if (!directorio.exists() || !directorio.isDirectory()) {
+                System.out.println("[ALVARO] Directorio no existe: " + rutaBackups);
+                JSONArray backupsArray = new JSONArray();
+                obj.put("data", backupsArray);
+                obj.put("estado", "exito");
+                obj.put("cantidad", 0);
+                return;
+            }
+
+            java.io.File[] archivos = directorio.listFiles((dir, name) ->
+                name.startsWith("server.jar_") || (name.startsWith("server_") && name.endsWith(".jar"))
+            );
+
+            JSONArray backupsArray = new JSONArray();
+
+            if (archivos != null && archivos.length > 0) {
+                java.util.Arrays.sort(archivos, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
+
+                for (java.io.File archivo : archivos) {
+                    JSONObject backupInfo = new JSONObject();
+                    backupInfo.put("nombre", archivo.getName());
+                    backupInfo.put("ruta", archivo.getAbsolutePath());
+                    backupInfo.put("tamaño", formatearTamaño(archivo.length()));
+                    backupInfo.put("tamaño_bytes", archivo.length());
+                    backupInfo.put("fecha", new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+                        .format(new java.util.Date(archivo.lastModified())));
+                    backupInfo.put("timestamp", archivo.lastModified());
+
+                    backupsArray.put(backupInfo);
+                }
+                System.out.println("[ALVARO] Se encontraron " + archivos.length + " backups");
+            } else {
+                System.out.println("[ALVARO] No se encontraron backups");
+            }
+
+            obj.put("data", backupsArray);
             obj.put("estado", "exito");
+            obj.put("cantidad", backupsArray.length());
+            System.out.println("[ALVARO] Response: " + obj.toString());
         } catch (Exception e) {
             obj.put("estado", "error");
             obj.put("error", e.getMessage());
+            System.out.println("[ALVARO] Error listando backups: " + e.getMessage());
             e.printStackTrace();
         }
     }
