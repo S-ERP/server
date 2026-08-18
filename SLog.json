@@ -13,9 +13,9 @@
     "caja": true,
     "drive": true,
     "empresa": true,
-    "inventario": true,
+    "inventario": false,
     "crm": true
   },
   "- SLog": "RealTime Log from server Servisofts",
-  "- Fecha": "2026-08-18T00:51:32.495-04:00"
+  "- Fecha": "2026-08-18T01:54:05.828-04:00"
 }
