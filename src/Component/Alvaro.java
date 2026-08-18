@@ -255,20 +255,26 @@ public class Alvaro {
     }
 
     public static void verBackupBackend(JSONObject obj, SSSessionAbstract session) {
+        java.io.BufferedReader reader = null;
         try {
             System.out.println("[ALVARO] ========== LISTANDO BACKUPS DE BACKEND ==========");
+
+            // local
+            // String sshHost = "servisofts@192.168.2.5";
+            // String remoteDir = "/u01/servicios/serp";
+
+            // produccion
             String sshHost = "servisofts@192.168.2.5";
             String remoteDir = "/home/servisofts/servicios/serp/entornos/serp/servicios/serp";
 
-            String comando = "ssh \"" + sshHost + "\" \"ls -lh " + remoteDir + "/server* 2>/dev/null\"";
+            String comando = "ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no \"" + sshHost + "\" \"ls -lh " + remoteDir + "/server* 2>/dev/null\"";
             System.out.println("[ALVARO] Ejecutando: " + comando);
 
             ProcessBuilder pb = new ProcessBuilder("bash", "-c", comando);
             pb.redirectErrorStream(true);
             Process proceso = pb.start();
 
-            java.io.BufferedReader reader = new java.io.BufferedReader(
-                    new java.io.InputStreamReader(proceso.getInputStream()));
+            reader = new java.io.BufferedReader(new java.io.InputStreamReader(proceso.getInputStream()));
             JSONArray backupsArray = new JSONArray();
             String linea;
 
@@ -307,6 +313,10 @@ public class Alvaro {
             int exitCode = proceso.waitFor();
             System.out.println("[ALVARO] Exit code: " + exitCode);
 
+            if (exitCode != 0) {
+                System.out.println("[ALVARO] Advertencia: SSH retornó código " + exitCode);
+            }
+
             obj.put("data", backupsArray);
             obj.put("estado", "exito");
             obj.put("cantidad", backupsArray.length());
@@ -317,6 +327,14 @@ public class Alvaro {
             obj.put("error", e.getMessage());
             System.out.println("[ALVARO] Error listando backups de backend: " + e.getMessage());
             e.printStackTrace();
+        } finally {
+            if (reader != null) {
+                try {
+                    reader.close();
+                } catch (Exception e) {
+                    System.out.println("[ALVARO] Error cerrando reader: " + e.getMessage());
+                }
+            }
         }
     }
 
