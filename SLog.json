@@ -1,10 +1,10 @@
 {
   "Servicios": {
     "facturacion": true,
-    "contabilidad": false,
+    "contabilidad": true,
     "proyecto": true,
     "banco_ganadero": false,
-    "notification": true,
+    "notification": false,
     "compra_venta": true,
     "sqr": true,
     "roles_permisos": true,
@@ -17,5 +17,5 @@
     "crm": true
   },
   "- SLog": "RealTime Log from server Servisofts",
-  "- Fecha": "2026-08-18T00:27:53.593-04:00"
+  "- Fecha": "2026-08-18T00:29:36.509-04:00"
 }

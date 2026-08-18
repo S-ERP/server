@@ -275,24 +275,28 @@ public class Alvaro {
                     System.out.println("[ALVARO] Partes encontradas: " + partes.length);
 
                     if (partes.length >= 9) {
-                        String permisos = partes[0];
                         String tamaño = partes[4];
                         String mes = partes[5];
                         String dia = partes[6];
                         String hora = partes[7];
                         String rutaArchivo = partes[8];
                         String nombre = new java.io.File(rutaArchivo).getName();
-                        String fecha = mes + " " + dia + " " + hora;
 
-                        JSONObject backupInfo = new JSONObject();
-                        backupInfo.put("nombre", nombre);
-                        backupInfo.put("ruta", rutaArchivo);
-                        backupInfo.put("tamaño", tamaño);
-                        backupInfo.put("tipo", "backend");
-                        backupInfo.put("fecha", fecha);
+                        if (nombre.startsWith("server.jar_")) {
+                            String fecha = mes + " " + dia + " " + hora;
 
-                        backupsArray.put(backupInfo);
-                        System.out.println("[ALVARO] ✓ Backup agregado: " + nombre + " | " + tamaño + " | " + fecha);
+                            JSONObject backupInfo = new JSONObject();
+                            backupInfo.put("nombre", nombre);
+                            backupInfo.put("ruta", rutaArchivo);
+                            backupInfo.put("tamaño", tamaño);
+                            backupInfo.put("tipo", "backend");
+                            backupInfo.put("fecha", fecha);
+
+                            backupsArray.put(backupInfo);
+                            System.out.println("[ALVARO] ✓ Backup agregado: " + nombre + " | " + tamaño + " | " + fecha);
+                        } else {
+                            System.out.println("[ALVARO] ✗ Archivo ignorado (no es backup): " + nombre);
+                        }
                     } else {
                         System.out.println("[ALVARO] ✗ Línea ignorada (partes insuficientes): " + partes.length);
                     }
@@ -347,17 +351,22 @@ public class Alvaro {
                         String hora = partes[7];
                         String rutaArchivo = partes[8];
                         String nombre = new java.io.File(rutaArchivo).getName();
-                        String fecha = mes + " " + dia + " " + hora;
 
-                        JSONObject backupInfo = new JSONObject();
-                        backupInfo.put("nombre", nombre);
-                        backupInfo.put("ruta", rutaArchivo);
-                        backupInfo.put("tamaño", tamaño);
-                        backupInfo.put("tipo", "frontend");
-                        backupInfo.put("fecha", fecha);
+                        if (nombre.startsWith("build_")) {
+                            String fecha = mes + " " + dia + " " + hora;
 
-                        backupsArray.put(backupInfo);
-                        System.out.println("[ALVARO] ✓ Backup agregado: " + nombre + " | " + tamaño + " | " + fecha);
+                            JSONObject backupInfo = new JSONObject();
+                            backupInfo.put("nombre", nombre);
+                            backupInfo.put("ruta", rutaArchivo);
+                            backupInfo.put("tamaño", tamaño);
+                            backupInfo.put("tipo", "frontend");
+                            backupInfo.put("fecha", fecha);
+
+                            backupsArray.put(backupInfo);
+                            System.out.println("[ALVARO] ✓ Backup agregado: " + nombre + " | " + tamaño + " | " + fecha);
+                        } else {
+                            System.out.println("[ALVARO] ✗ Directorio ignorado: " + nombre);
+                        }
                     } else {
                         System.out.println("[ALVARO] ✗ Línea ignorada (partes insuficientes): " + partes.length);
                     }
