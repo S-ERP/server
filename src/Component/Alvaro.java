@@ -11,6 +11,22 @@ import Server.SSSAbstract.SSSessionAbstract;
 public class Alvaro {
     public static final String COMPONENT = "alvaro";
 
+    // ========== CONFIGURACIÓN POR ENTORNO ==========
+    // Cambiar según tu entorno:
+    // - LOCAL (desarrollo): USE_CONFIG_FILE = true
+    // - PRODUCCIÓN: Descomentar USE_CONFIG_FILE = false y sus variables
+
+    // LOCAL - Lee de config.json
+    private static final boolean USE_CONFIG_FILE = true;
+
+    // PRODUCCIÓN - Usar valores hardcodeados (descomentar si necesitas)
+    // Descomentar estas líneas y comentar USE_CONFIG_FILE = true arriba
+    // private static final boolean USE_CONFIG_FILE = false;
+    // private static final String PROD_SCRIPTS_DIR = "/home/servisofts/servicios/serp/scripts";
+    // private static final String PROD_BACKUPS_DIR = "/home/servisofts/servicios/serp/backups";
+    // private static final String PROD_SSH_HOST = "servisofts@192.168.2.5";
+    // private static final String PROD_REMOTE_DIR = "/home/servisofts/servicios/serp/entornos/serp/servicios/serp";
+
     private static JSONObject getAlvaroConfig() {
         JSONObject config = SConfig.getJSON();
         if (config != null && config.has("alvaro")) {
@@ -20,21 +36,52 @@ public class Alvaro {
     }
 
     private static String getScriptPath(String scriptName) {
+        String scriptsDir = getScriptsDir();
+        return scriptsDir + "/" + scriptName;
+    }
+
+    private static String getScriptsDir() {
+        if (!USE_CONFIG_FILE) {
+            return "/home/servisofts/servicios/serp/scripts";
+        }
         JSONObject alvaroConfig = getAlvaroConfig();
         if (alvaroConfig.has("scripts_dir")) {
-            return alvaroConfig.getString("scripts_dir") + "/" + scriptName;
+            return alvaroConfig.getString("scripts_dir");
         }
-        return scriptName;
+        throw new RuntimeException("scripts_dir no configurado en alvaro config");
     }
 
     private static String getSSHHost() {
+        if (!USE_CONFIG_FILE) {
+            return "servisofts@192.168.2.5";
+        }
         JSONObject alvaroConfig = getAlvaroConfig();
-        return alvaroConfig.optString("ssh_host", "servisofts@192.168.2.5");
+        if (!alvaroConfig.has("ssh_host")) {
+            throw new RuntimeException("ssh_host no configurado en alvaro config");
+        }
+        return alvaroConfig.getString("ssh_host");
     }
 
     private static String getBackupsDir() {
+        if (!USE_CONFIG_FILE) {
+            return "/home/servisofts/servicios/serp/backups";
+        }
         JSONObject alvaroConfig = getAlvaroConfig();
-        return alvaroConfig.optString("backups_dir", "/home/servisofts/servicios/serp/entornos/serp/servicios/serp");
+        if (!alvaroConfig.has("backups_dir")) {
+            throw new RuntimeException("backups_dir no configurado en alvaro config");
+        }
+        return alvaroConfig.getString("backups_dir");
+    }
+
+    private static String getRemoteDir() {
+        if (!USE_CONFIG_FILE) {
+            return "/home/servisofts/servicios/serp/entornos/serp/servicios/serp";
+        }
+        JSONObject alvaroConfig = getAlvaroConfig();
+        if (!alvaroConfig.has("remote_dir")) {
+            throw new RuntimeException("remote_dir no configurado en alvaro config");
+        }
+        return alvaroConfig.getString("remote_dir");
     }
 
     public static void onMessage(JSONObject obj, SSSessionAbstract session) {
@@ -227,8 +274,7 @@ public class Alvaro {
             System.out.println("[ALVARO] Datos recibidos: " + obj.toString());
 
             String rutaScript = getScriptPath("alvaro_frontend_backup.sh");
-            JSONObject alvaroConfig = getAlvaroConfig();
-            String remoteDir = alvaroConfig.optString("remote_dir", "~/servicios/serp/entornos/serp");
+            String remoteDir = getRemoteDir();
             System.out.println("[ALVARO] Ruta del script: " + rutaScript);
 
             ProcessBuilder pb = new ProcessBuilder("bash", "-c", "bash \"" + rutaScript + "\"");
@@ -346,8 +392,7 @@ public class Alvaro {
         try {
             System.out.println("[ALVARO] ========== LISTANDO BACKUPS DE FRONTEND ==========");
             String sshHost = getSSHHost();
-            JSONObject alvaroConfig = getAlvaroConfig();
-            String remoteDir = alvaroConfig.optString("remote_dir", "~/servicios/serp/entornos/serp");
+            String remoteDir = getRemoteDir();
 
             String comando = "ssh \"" + sshHost + "\" \"ls -lhd " + remoteDir + "/build* 2>/dev/null\"";
             System.out.println("[ALVARO] Ejecutando: " + comando);
@@ -551,8 +596,7 @@ public class Alvaro {
             System.out.println("[ALVARO] ========== RESTAURANDO BACKUP FRONTEND ==========");
             String sshHost = getSSHHost();
             String rutaBackup = obj.optString("ruta", "");
-            JSONObject alvaroConfig = getAlvaroConfig();
-            String remoteDir = alvaroConfig.optString("remote_dir", "~/servicios/serp/entornos/serp");
+            String remoteDir = getRemoteDir();
             String buildDir = remoteDir + "/build";
 
             if (rutaBackup.isEmpty()) {
