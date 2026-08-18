@@ -12,16 +12,12 @@ public class Alvaro {
     public static final String COMPONENT = "alvaro";
 
     // ========== CONFIGURACIÓN POR ENTORNO ==========
-    // Cambiar según tu entorno:
-    // - LOCAL (desarrollo): USE_CONFIG_FILE = true
-    // - PRODUCCIÓN: Descomentar USE_CONFIG_FILE = false y sus variables
+    // TRUE = Lee de config.json (RECOMENDADO PARA PRODUCCIÓN)
+    // FALSE = Usa valores hardcodeados abajo (opcional)
 
-    // LOCAL - Lee de config.json
-    private static final boolean USE_CONFIG_FILE = true;
+    private static final boolean USE_CONFIG_FILE = true;  // ← CAMBIAR AQUÍ: true o false
 
-    // PRODUCCIÓN - Usar valores hardcodeados (descomentar si necesitas)
-    // Descomentar estas líneas y comentar USE_CONFIG_FILE = true arriba
-    // private static final boolean USE_CONFIG_FILE = false;
+    // Valores hardcodeados (SOLO si USE_CONFIG_FILE = false)
     // private static final String PROD_SCRIPTS_DIR = "/home/servisofts/servicios/serp/scripts";
     // private static final String PROD_BACKUPS_DIR = "/home/servisofts/servicios/serp/backups";
     // private static final String PROD_SSH_HOST = "servisofts@192.168.2.5";
@@ -326,54 +322,53 @@ public class Alvaro {
     public static void verBackupBackend(JSONObject obj, SSSessionAbstract session) {
         try {
             System.out.println("[ALVARO] ========== LISTANDO BACKUPS DE BACKEND ==========");
-            String sshHost = getSSHHost();
-            String remoteDir = getBackupsDir();
+            String backupsDir = getBackupsDir();
+            System.out.println("[ALVARO] Directorio de backups: " + backupsDir);
 
-            String comando = "ssh \"" + sshHost + "\" \"ls -lh " + remoteDir + "/server* 2>/dev/null\"";
-            System.out.println("[ALVARO] Ejecutando: " + comando);
+            java.io.File dir = new java.io.File(backupsDir);
 
-            ProcessBuilder pb = new ProcessBuilder("bash", "-c", comando);
-            pb.redirectErrorStream(true);
-            Process proceso = pb.start();
-
-            java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(proceso.getInputStream()));
-            JSONArray backupsArray = new JSONArray();
-            String linea;
-
-            while ((linea = reader.readLine()) != null) {
-                linea = linea.trim();
-                if (!linea.isEmpty()) {
-                    System.out.println("[ALVARO] Linea raw: " + linea);
-
-                    String[] partes = linea.split("\\s+");
-                    System.out.println("[ALVARO] Partes encontradas: " + partes.length);
-
-                    if (partes.length >= 9) {
-                        String tamaño = partes[4];
-                        String mes = partes[5];
-                        String dia = partes[6];
-                        String hora = partes[7];
-                        String rutaArchivo = partes[8];
-                        String nombre = new java.io.File(rutaArchivo).getName();
-                        String fecha = mes + " " + dia + " " + hora;
-
-                        JSONObject backupInfo = new JSONObject();
-                        backupInfo.put("nombre", nombre);
-                        backupInfo.put("ruta", rutaArchivo);
-                        backupInfo.put("tamaño", tamaño);
-                        backupInfo.put("tipo", "backend");
-                        backupInfo.put("fecha", fecha);
-
-                        backupsArray.put(backupInfo);
-                        System.out.println("[ALVARO] ✓ Agregado: " + nombre + " | " + tamaño + " | " + fecha);
-                    } else {
-                        System.out.println("[ALVARO] ✗ Línea ignorada (partes insuficientes): " + partes.length);
-                    }
-                }
+            if (!dir.exists()) {
+                obj.put("estado", "error");
+                obj.put("error", "Directorio de backups no existe: " + backupsDir);
+                System.out.println("[ALVARO] Error: Directorio no existe: " + backupsDir);
+                return;
             }
 
-            int exitCode = proceso.waitFor();
-            System.out.println("[ALVARO] Exit code: " + exitCode);
+            if (!dir.isDirectory()) {
+                obj.put("estado", "error");
+                obj.put("error", "No es un directorio: " + backupsDir);
+                System.out.println("[ALVARO] Error: No es un directorio: " + backupsDir);
+                return;
+            }
+
+            java.io.File[] archivos = dir.listFiles((d, name) -> name.startsWith("server"));
+
+            if (archivos == null) {
+                archivos = new java.io.File[0];
+            }
+
+            JSONArray backupsArray = new JSONArray();
+
+            for (java.io.File archivo : archivos) {
+                if (archivo.isFile()) {
+                    String nombre = archivo.getName();
+                    String tamaño = formatearTamaño(archivo.length());
+                    long timestamp = archivo.lastModified();
+                    java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+                    String fecha = sdf.format(new java.util.Date(timestamp));
+
+                    JSONObject backupInfo = new JSONObject();
+                    backupInfo.put("nombre", nombre);
+                    backupInfo.put("ruta", archivo.getAbsolutePath());
+                    backupInfo.put("tamaño", tamaño);
+                    backupInfo.put("tipo", "backend");
+                    backupInfo.put("fecha", fecha);
+                    backupInfo.put("timestamp", timestamp);
+
+                    backupsArray.put(backupInfo);
+                    System.out.println("[ALVARO] ✓ Agregado: " + nombre + " | " + tamaño + " | " + fecha);
+                }
+            }
 
             obj.put("data", backupsArray);
             obj.put("estado", "exito");
@@ -391,54 +386,54 @@ public class Alvaro {
     public static void verBackupFrontend(JSONObject obj, SSSessionAbstract session) {
         try {
             System.out.println("[ALVARO] ========== LISTANDO BACKUPS DE FRONTEND ==========");
-            String sshHost = getSSHHost();
             String remoteDir = getRemoteDir();
+            System.out.println("[ALVARO] Directorio remoto: " + remoteDir);
 
-            String comando = "ssh \"" + sshHost + "\" \"ls -lhd " + remoteDir + "/build* 2>/dev/null\"";
-            System.out.println("[ALVARO] Ejecutando: " + comando);
+            java.io.File dir = new java.io.File(remoteDir);
 
-            ProcessBuilder pb = new ProcessBuilder("bash", "-c", comando);
-            pb.redirectErrorStream(true);
-            Process proceso = pb.start();
-
-            java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(proceso.getInputStream()));
-            JSONArray backupsArray = new JSONArray();
-            String linea;
-
-            while ((linea = reader.readLine()) != null) {
-                linea = linea.trim();
-                if (!linea.isEmpty()) {
-                    System.out.println("[ALVARO] Linea raw: " + linea);
-
-                    String[] partes = linea.split("\\s+");
-                    System.out.println("[ALVARO] Partes encontradas: " + partes.length);
-
-                    if (partes.length >= 9) {
-                        String tamaño = partes[4];
-                        String mes = partes[5];
-                        String dia = partes[6];
-                        String hora = partes[7];
-                        String rutaArchivo = partes[8];
-                        String nombre = new java.io.File(rutaArchivo).getName();
-                        String fecha = mes + " " + dia + " " + hora;
-
-                        JSONObject backupInfo = new JSONObject();
-                        backupInfo.put("nombre", nombre);
-                        backupInfo.put("ruta", rutaArchivo);
-                        backupInfo.put("tamaño", tamaño);
-                        backupInfo.put("tipo", "frontend");
-                        backupInfo.put("fecha", fecha);
-
-                        backupsArray.put(backupInfo);
-                        System.out.println("[ALVARO] ✓ Agregado: " + nombre + " | " + tamaño + " | " + fecha);
-                    } else {
-                        System.out.println("[ALVARO] ✗ Línea ignorada (partes insuficientes): " + partes.length);
-                    }
-                }
+            if (!dir.exists()) {
+                obj.put("estado", "error");
+                obj.put("error", "Directorio remoto no existe: " + remoteDir);
+                System.out.println("[ALVARO] Error: Directorio no existe: " + remoteDir);
+                return;
             }
 
-            int exitCode = proceso.waitFor();
-            System.out.println("[ALVARO] Exit code: " + exitCode);
+            if (!dir.isDirectory()) {
+                obj.put("estado", "error");
+                obj.put("error", "No es un directorio: " + remoteDir);
+                System.out.println("[ALVARO] Error: No es un directorio: " + remoteDir);
+                return;
+            }
+
+            java.io.File[] archivos = dir.listFiles((d, name) -> name.startsWith("build"));
+
+            if (archivos == null) {
+                archivos = new java.io.File[0];
+            }
+
+            JSONArray backupsArray = new JSONArray();
+
+            for (java.io.File archivo : archivos) {
+                if (archivo.isDirectory()) {
+                    String nombre = archivo.getName();
+                    long tamañoDir = obtenerTamañoDirectorio(archivo);
+                    String tamaño = formatearTamaño(tamañoDir);
+                    long timestamp = archivo.lastModified();
+                    java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+                    String fecha = sdf.format(new java.util.Date(timestamp));
+
+                    JSONObject backupInfo = new JSONObject();
+                    backupInfo.put("nombre", nombre);
+                    backupInfo.put("ruta", archivo.getAbsolutePath());
+                    backupInfo.put("tamaño", tamaño);
+                    backupInfo.put("tipo", "frontend");
+                    backupInfo.put("fecha", fecha);
+                    backupInfo.put("timestamp", timestamp);
+
+                    backupsArray.put(backupInfo);
+                    System.out.println("[ALVARO] ✓ Agregado: " + nombre + " | " + tamaño + " | " + fecha);
+                }
+            }
 
             obj.put("data", backupsArray);
             obj.put("estado", "exito");
@@ -458,6 +453,23 @@ public class Alvaro {
         final String[] unidades = { "B", "KB", "MB", "GB" };
         int indice = (int) (Math.log10(bytes) / Math.log10(1024));
         return String.format("%.2f %s", bytes / Math.pow(1024, indice), unidades[indice]);
+    }
+
+    private static long obtenerTamañoDirectorio(java.io.File dir) {
+        long tamaño = 0;
+        if (dir.isDirectory()) {
+            java.io.File[] archivos = dir.listFiles();
+            if (archivos != null) {
+                for (java.io.File archivo : archivos) {
+                    if (archivo.isDirectory()) {
+                        tamaño += obtenerTamañoDirectorio(archivo);
+                    } else {
+                        tamaño += archivo.length();
+                    }
+                }
+            }
+        }
+        return tamaño;
     }
 
     public static void infoServidor(JSONObject obj, SSSessionAbstract session) {
@@ -481,7 +493,6 @@ public class Alvaro {
     public static void eliminarBackupBackend(JSONObject obj, SSSessionAbstract session) {
         try {
             System.out.println("[ALVARO] ========== ELIMINANDO BACKUP BACKEND ==========");
-            String sshHost = getSSHHost();
             String rutaBackup = obj.optString("ruta", "");
 
             if (rutaBackup.isEmpty()) {
@@ -490,21 +501,23 @@ public class Alvaro {
                 return;
             }
 
-            String comando = "ssh \"" + sshHost + "\" \"rm -f '" + rutaBackup + "'\"";
-            System.out.println("[ALVARO] Ejecutando: " + comando);
+            java.io.File archivo = new java.io.File(rutaBackup);
 
-            ProcessBuilder pb = new ProcessBuilder("bash", "-c", comando);
-            pb.redirectErrorStream(true);
-            Process proceso = pb.start();
-            int exitCode = proceso.waitFor();
+            if (!archivo.exists()) {
+                obj.put("estado", "error");
+                obj.put("error", "Archivo no existe: " + rutaBackup);
+                System.out.println("[ALVARO] Error: Archivo no existe: " + rutaBackup);
+                return;
+            }
 
-            if (exitCode == 0) {
+            if (archivo.delete()) {
                 obj.put("estado", "exito");
                 obj.put("mensaje", "Backup backend eliminado exitosamente");
                 System.out.println("[ALVARO] Backup eliminado: " + rutaBackup);
             } else {
                 obj.put("estado", "error");
-                obj.put("error", "Error al eliminar el backup (código: " + exitCode + ")");
+                obj.put("error", "No se pudo eliminar el archivo");
+                System.out.println("[ALVARO] Error: No se pudo eliminar: " + rutaBackup);
             }
             System.out.println("[ALVARO] ========== COMPLETADO ==========");
         } catch (Exception e) {
@@ -518,9 +531,9 @@ public class Alvaro {
     public static void restaurarBackupBackend(JSONObject obj, SSSessionAbstract session) {
         try {
             System.out.println("[ALVARO] ========== RESTAURANDO BACKUP BACKEND ==========");
-            String sshHost = getSSHHost();
             String rutaBackup = obj.optString("ruta", "");
-            String remoteDir = getBackupsDir();
+            String remoteDir = getRemoteDir();
+            String rutaDestino = remoteDir + "/server.jar";
 
             if (rutaBackup.isEmpty()) {
                 obj.put("estado", "error");
@@ -528,22 +541,28 @@ public class Alvaro {
                 return;
             }
 
-            String comando = "ssh \"" + sshHost + "\" \"cp '" + rutaBackup + "' '" + remoteDir + "/server.jar'\"";
-            System.out.println("[ALVARO] Ejecutando: " + comando);
+            java.io.File archivoBackup = new java.io.File(rutaBackup);
 
-            ProcessBuilder pb = new ProcessBuilder("bash", "-c", comando);
-            pb.redirectErrorStream(true);
-            Process proceso = pb.start();
-            int exitCode = proceso.waitFor();
+            if (!archivoBackup.exists()) {
+                obj.put("estado", "error");
+                obj.put("error", "Archivo de backup no existe: " + rutaBackup);
+                System.out.println("[ALVARO] Error: Archivo no existe: " + rutaBackup);
+                return;
+            }
 
-            if (exitCode == 0) {
+            java.io.File archivoDestino = new java.io.File(rutaDestino);
+
+            try {
+                copiarArchivo(archivoBackup, archivoDestino);
                 obj.put("estado", "exito");
                 obj.put("mensaje", "Backup backend restaurado exitosamente");
-                System.out.println("[ALVARO] Backup restaurado: " + rutaBackup);
-            } else {
+                System.out.println("[ALVARO] Backup restaurado: " + rutaBackup + " -> " + rutaDestino);
+            } catch (Exception ex) {
                 obj.put("estado", "error");
-                obj.put("error", "Error al restaurar el backup (código: " + exitCode + ")");
+                obj.put("error", "Error al copiar archivo: " + ex.getMessage());
+                System.out.println("[ALVARO] Error: " + ex.getMessage());
             }
+
             System.out.println("[ALVARO] ========== COMPLETADO ==========");
         } catch (Exception e) {
             obj.put("estado", "error");
@@ -553,10 +572,24 @@ public class Alvaro {
         }
     }
 
+    private static void copiarArchivo(java.io.File origen, java.io.File destino) throws Exception {
+        java.io.FileInputStream fis = new java.io.FileInputStream(origen);
+        java.io.FileOutputStream fos = new java.io.FileOutputStream(destino);
+
+        byte[] buffer = new byte[1024];
+        int longitud;
+
+        while ((longitud = fis.read(buffer)) > 0) {
+            fos.write(buffer, 0, longitud);
+        }
+
+        fis.close();
+        fos.close();
+    }
+
     public static void eliminarBackupFrontend(JSONObject obj, SSSessionAbstract session) {
         try {
             System.out.println("[ALVARO] ========== ELIMINANDO BACKUP FRONTEND ==========");
-            String sshHost = getSSHHost();
             String rutaBackup = obj.optString("ruta", "");
 
             if (rutaBackup.isEmpty()) {
@@ -565,22 +598,23 @@ public class Alvaro {
                 return;
             }
 
-            String rutaAbsoluta = rutaBackup.replace("~/", "/home/servisofts/");
-            String comando = "ssh \"" + sshHost + "\" \"rm -rf '" + rutaAbsoluta + "'\"";
-            System.out.println("[ALVARO] Ejecutando: " + comando);
+            java.io.File archivo = new java.io.File(rutaBackup);
 
-            ProcessBuilder pb = new ProcessBuilder("bash", "-c", comando);
-            pb.redirectErrorStream(true);
-            Process proceso = pb.start();
-            int exitCode = proceso.waitFor();
+            if (!archivo.exists()) {
+                obj.put("estado", "error");
+                obj.put("error", "Directorio no existe: " + rutaBackup);
+                System.out.println("[ALVARO] Error: Directorio no existe: " + rutaBackup);
+                return;
+            }
 
-            if (exitCode == 0) {
+            if (eliminarDirectorio(archivo)) {
                 obj.put("estado", "exito");
                 obj.put("mensaje", "Backup frontend eliminado exitosamente");
-                System.out.println("[ALVARO] Backup eliminado: " + rutaAbsoluta);
+                System.out.println("[ALVARO] Backup eliminado: " + rutaBackup);
             } else {
                 obj.put("estado", "error");
-                obj.put("error", "Error al eliminar el backup (código: " + exitCode + ")");
+                obj.put("error", "No se pudo eliminar el directorio");
+                System.out.println("[ALVARO] Error: No se pudo eliminar: " + rutaBackup);
             }
             System.out.println("[ALVARO] ========== COMPLETADO ==========");
         } catch (Exception e) {
@@ -591,10 +625,23 @@ public class Alvaro {
         }
     }
 
+    private static boolean eliminarDirectorio(java.io.File dir) {
+        if (dir.isDirectory()) {
+            java.io.File[] archivos = dir.listFiles();
+            if (archivos != null) {
+                for (java.io.File archivo : archivos) {
+                    if (!eliminarDirectorio(archivo)) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return dir.delete();
+    }
+
     public static void restaurarBackupFrontend(JSONObject obj, SSSessionAbstract session) {
         try {
             System.out.println("[ALVARO] ========== RESTAURANDO BACKUP FRONTEND ==========");
-            String sshHost = getSSHHost();
             String rutaBackup = obj.optString("ruta", "");
             String remoteDir = getRemoteDir();
             String buildDir = remoteDir + "/build";
@@ -605,28 +652,58 @@ public class Alvaro {
                 return;
             }
 
-            String comando = "ssh \"" + sshHost + "\" \"rm -rf '" + buildDir + "' && cp -r '" + rutaBackup + "' '" + buildDir + "'\"";
-            System.out.println("[ALVARO] Ejecutando: " + comando);
+            java.io.File backupDir = new java.io.File(rutaBackup);
 
-            ProcessBuilder pb = new ProcessBuilder("bash", "-c", comando);
-            pb.redirectErrorStream(true);
-            Process proceso = pb.start();
-            int exitCode = proceso.waitFor();
+            if (!backupDir.exists() || !backupDir.isDirectory()) {
+                obj.put("estado", "error");
+                obj.put("error", "Directorio de backup no existe: " + rutaBackup);
+                System.out.println("[ALVARO] Error: Directorio no existe: " + rutaBackup);
+                return;
+            }
 
-            if (exitCode == 0) {
+            java.io.File dirDestino = new java.io.File(buildDir);
+
+            try {
+                if (dirDestino.exists()) {
+                    eliminarDirectorio(dirDestino);
+                    System.out.println("[ALVARO] Directorio anterior eliminado: " + buildDir);
+                }
+
+                copiarDirectorio(backupDir, dirDestino);
                 obj.put("estado", "exito");
                 obj.put("mensaje", "Backup frontend restaurado exitosamente");
-                System.out.println("[ALVARO] Backup restaurado: " + rutaBackup);
-            } else {
+                System.out.println("[ALVARO] Backup restaurado: " + rutaBackup + " -> " + buildDir);
+            } catch (Exception ex) {
                 obj.put("estado", "error");
-                obj.put("error", "Error al restaurar el backup (código: " + exitCode + ")");
+                obj.put("error", "Error al restaurar: " + ex.getMessage());
+                System.out.println("[ALVARO] Error: " + ex.getMessage());
             }
+
             System.out.println("[ALVARO] ========== COMPLETADO ==========");
         } catch (Exception e) {
             obj.put("estado", "error");
             obj.put("error", e.getMessage());
             System.out.println("[ALVARO] Error restaurando backup frontend: " + e.getMessage());
             e.printStackTrace();
+        }
+    }
+
+    private static void copiarDirectorio(java.io.File origen, java.io.File destino) throws Exception {
+        if (!destino.exists()) {
+            destino.mkdirs();
+        }
+
+        java.io.File[] archivos = origen.listFiles();
+        if (archivos != null) {
+            for (java.io.File archivo : archivos) {
+                java.io.File nuevaRuta = new java.io.File(destino, archivo.getName());
+
+                if (archivo.isDirectory()) {
+                    copiarDirectorio(archivo, nuevaRuta);
+                } else {
+                    copiarArchivo(archivo, nuevaRuta);
+                }
+            }
         }
     }
 
