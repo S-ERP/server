@@ -255,7 +255,7 @@ public class Alvaro {
             String sshHost = "servisofts@192.168.2.5";
             String remoteDir = "/home/servisofts/servicios/serp/entornos/serp/servicios/serp";
 
-            String comando = "ssh \"" + sshHost + "\" \"ls -lh " + remoteDir + "/server.jar_* 2>/dev/null\"";
+            String comando = "ssh \"" + sshHost + "\" \"ls -lh " + remoteDir + "/server* 2>/dev/null\"";
             System.out.println("[ALVARO] Ejecutando: " + comando);
 
             ProcessBuilder pb = new ProcessBuilder("bash", "-c", comando);
@@ -281,22 +281,17 @@ public class Alvaro {
                         String hora = partes[7];
                         String rutaArchivo = partes[8];
                         String nombre = new java.io.File(rutaArchivo).getName();
+                        String fecha = mes + " " + dia + " " + hora;
 
-                        if (nombre.startsWith("server.jar_")) {
-                            String fecha = mes + " " + dia + " " + hora;
+                        JSONObject backupInfo = new JSONObject();
+                        backupInfo.put("nombre", nombre);
+                        backupInfo.put("ruta", rutaArchivo);
+                        backupInfo.put("tamaño", tamaño);
+                        backupInfo.put("tipo", "backend");
+                        backupInfo.put("fecha", fecha);
 
-                            JSONObject backupInfo = new JSONObject();
-                            backupInfo.put("nombre", nombre);
-                            backupInfo.put("ruta", rutaArchivo);
-                            backupInfo.put("tamaño", tamaño);
-                            backupInfo.put("tipo", "backend");
-                            backupInfo.put("fecha", fecha);
-
-                            backupsArray.put(backupInfo);
-                            System.out.println("[ALVARO] ✓ Backup agregado: " + nombre + " | " + tamaño + " | " + fecha);
-                        } else {
-                            System.out.println("[ALVARO] ✗ Archivo ignorado (no es backup): " + nombre);
-                        }
+                        backupsArray.put(backupInfo);
+                        System.out.println("[ALVARO] ✓ Agregado: " + nombre + " | " + tamaño + " | " + fecha);
                     } else {
                         System.out.println("[ALVARO] ✗ Línea ignorada (partes insuficientes): " + partes.length);
                     }
@@ -351,22 +346,17 @@ public class Alvaro {
                         String hora = partes[7];
                         String rutaArchivo = partes[8];
                         String nombre = new java.io.File(rutaArchivo).getName();
+                        String fecha = mes + " " + dia + " " + hora;
 
-                        if (nombre.startsWith("build_")) {
-                            String fecha = mes + " " + dia + " " + hora;
+                        JSONObject backupInfo = new JSONObject();
+                        backupInfo.put("nombre", nombre);
+                        backupInfo.put("ruta", rutaArchivo);
+                        backupInfo.put("tamaño", tamaño);
+                        backupInfo.put("tipo", "frontend");
+                        backupInfo.put("fecha", fecha);
 
-                            JSONObject backupInfo = new JSONObject();
-                            backupInfo.put("nombre", nombre);
-                            backupInfo.put("ruta", rutaArchivo);
-                            backupInfo.put("tamaño", tamaño);
-                            backupInfo.put("tipo", "frontend");
-                            backupInfo.put("fecha", fecha);
-
-                            backupsArray.put(backupInfo);
-                            System.out.println("[ALVARO] ✓ Backup agregado: " + nombre + " | " + tamaño + " | " + fecha);
-                        } else {
-                            System.out.println("[ALVARO] ✗ Directorio ignorado: " + nombre);
-                        }
+                        backupsArray.put(backupInfo);
+                        System.out.println("[ALVARO] ✓ Agregado: " + nombre + " | " + tamaño + " | " + fecha);
                     } else {
                         System.out.println("[ALVARO] ✗ Línea ignorada (partes insuficientes): " + partes.length);
                     }
