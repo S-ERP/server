@@ -1,6 +1,6 @@
 {
   "Servicios": {
-    "facturacion": false,
+    "facturacion": true,
     "contabilidad": true,
     "proyecto": true,
     "banco_ganadero": false,
@@ -17,5 +17,5 @@
     "crm": true
   },
   "- SLog": "RealTime Log from server Servisofts",
-  "- Fecha": "2026-08-17T20:03:05.528-04:00"
+  "- Fecha": "2026-08-17T23:45:01.722-04:00"
 }

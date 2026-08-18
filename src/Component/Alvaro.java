@@ -15,6 +15,27 @@ public class Alvaro {
             case "crearBackup":
                 crearBackup(obj, session);
                 break;
+            case "crearBackupBackend":
+                crearBackupBackend(obj, session);
+                break;
+            case "backend_ver_backup":
+                verBackupBackend(obj, session);
+                break;
+            case "frontend_ver_backup":
+                verBackupFrontend(obj, session);
+                break;
+            case "eliminarBackupBackend":
+                eliminarBackupBackend(obj, session);
+                break;
+            case "restaurarBackupBackend":
+                restaurarBackupBackend(obj, session);
+                break;
+            case "eliminarBackupFrontend":
+                eliminarBackupFrontend(obj, session);
+                break;
+            case "restaurarBackupFrontend":
+                restaurarBackupFrontend(obj, session);
+                break;
             case "listarBackups":
                 listarBackups(obj, session);
                 break;
@@ -103,6 +124,200 @@ public class Alvaro {
             obj.put("estado", "error");
             obj.put("error", e.getMessage());
             System.out.println("[ALVARO] EXCEPCIÓN EN crearBackup: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    public static void crearBackupBackend(JSONObject obj, SSSessionAbstract session) {
+        try {
+            System.out.println("[ALVARO] ========== INICIANDO crearBackupBackend ==========");
+            System.out.println("[ALVARO] Datos recibidos: " + obj.toString());
+
+            String rutaScript = "/home/servisofts/Documents/GitHub/alvaro/serp_alvaro/server/alvaro_backend_backup .sh";
+            String rutaBackups = "/home/servisofts/servicios/serp/entornos/serp/servicios/serp";
+            System.out.println("[ALVARO] Ruta del script: " + rutaScript);
+
+            ProcessBuilder pb = new ProcessBuilder("bash", "-c", "bash \"" + rutaScript + "\"");
+            pb.redirectErrorStream(true);
+            System.out.println("[ALVARO] Ejecutando: " + pb.command());
+
+            Process proceso = pb.start();
+            System.out.println("[ALVARO] Script iniciado");
+
+            int exitCode = proceso.waitFor();
+            System.out.println("[ALVARO] Exit code del script: " + exitCode);
+
+            if (exitCode != 0) {
+                obj.put("estado", "error");
+                obj.put("error", "Error al ejecutar script de backup backend (código: " + exitCode + ")");
+                System.out.println("[ALVARO] Error: Script retornó código " + exitCode);
+                return;
+            }
+
+            System.out.println("[ALVARO] Script ejecutado exitosamente");
+
+            String nombreBackup = "server_backend_" + new java.text.SimpleDateFormat("yyyy-MM-dd_HHmmss").format(new java.util.Date());
+            String rutaCompleta = rutaBackups + "/" + nombreBackup + ".jar";
+
+            JSONObject backup = new JSONObject();
+            backup.put("key", SUtil.uuid());
+            backup.put("estado", 1);
+            backup.put("key_usuario", obj.optString("key_usuario", "sistema"));
+            backup.put("key_empresa", obj.optString("key_empresa", "empresa"));
+            backup.put("nombre", nombreBackup);
+            backup.put("ruta", rutaCompleta);
+            backup.put("descripcion", obj.optString("descripcion", "").replaceAll("'", "''"));
+            backup.put("tipo", "backend");
+            backup.put("fecha_creacion", SUtil.now());
+            backup.put("fecha_backup", SUtil.now());
+
+            java.io.File archivoBackup = new java.io.File(rutaCompleta);
+            if (archivoBackup.exists()) {
+                long tamaño = archivoBackup.length();
+                backup.put("tamaño", formatearTamaño(tamaño));
+                System.out.println("[ALVARO] Archivo backup backend encontrado: " + nombreBackup + " (" + formatearTamaño(tamaño) + ")");
+            } else {
+                backup.put("tamaño", "0");
+                System.out.println("[ALVARO] Advertencia: Archivo backup backend no encontrado en: " + rutaCompleta);
+            }
+
+            System.out.println("[ALVARO] Backup backend a insertar: " + backup.toString());
+
+            try {
+                SPGConect.insertArray(COMPONENT, new JSONArray().put(backup));
+                System.out.println("[ALVARO] Backup backend insertado en BD");
+            } catch (Exception dbError) {
+                System.out.println("[ALVARO] Advertencia: No se pudo insertar en BD (tabla puede no existir)");
+                System.out.println("[ALVARO] Error BD: " + dbError.getMessage());
+            }
+
+            obj.put("data", backup);
+            obj.put("estado", "exito");
+            obj.put("mensaje", "Backup backend creado exitosamente: " + nombreBackup);
+            System.out.println("[ALVARO] ========== crearBackupBackend COMPLETADO ==========");
+        } catch (Exception e) {
+            obj.put("estado", "error");
+            obj.put("error", e.getMessage());
+            System.out.println("[ALVARO] EXCEPCIÓN EN crearBackupBackend: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    public static void verBackupBackend(JSONObject obj, SSSessionAbstract session) {
+        try {
+            System.out.println("[ALVARO] ========== LISTANDO BACKUPS DE BACKEND ==========");
+            String sshHost = "servisofts@192.168.2.5";
+            String remoteDir = "/home/servisofts/servicios/serp/entornos/serp/servicios/serp";
+
+            String comando = "ssh \"" + sshHost + "\" \"ls -lh " + remoteDir + "/server*.jar 2>/dev/null | awk '{print \\$6, \\$7, \\$8, \\$9, \\\"(\\\" \\$5 \\\")\\\"}' \"";
+            System.out.println("[ALVARO] Ejecutando: " + comando);
+
+            ProcessBuilder pb = new ProcessBuilder("bash", "-c", comando);
+            pb.redirectErrorStream(true);
+            Process proceso = pb.start();
+
+            java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(proceso.getInputStream()));
+            JSONArray backupsArray = new JSONArray();
+            String linea;
+
+            while ((linea = reader.readLine()) != null) {
+                linea = linea.trim();
+                if (!linea.isEmpty()) {
+                    System.out.println("[ALVARO] Linea: " + linea);
+
+                    String[] partes = linea.split(" \\(");
+                    if (partes.length == 2) {
+                        String datosArchivo = partes[0].trim();
+                        String tamaño = partes[1].replace(")", "").trim();
+
+                        String[] dateAndFile = datosArchivo.split(" (?=[^ ]*\\.jar)");
+                        String fecha = dateAndFile[0].trim();
+                        String ruta = dateAndFile.length > 1 ? dateAndFile[1].trim() : "";
+                        String nombre = new java.io.File(ruta).getName();
+
+                        JSONObject backupInfo = new JSONObject();
+                        backupInfo.put("nombre", nombre);
+                        backupInfo.put("ruta", ruta);
+                        backupInfo.put("tamaño", tamaño);
+                        backupInfo.put("tipo", "backend");
+                        backupInfo.put("fecha", fecha);
+
+                        backupsArray.put(backupInfo);
+                    }
+                }
+            }
+
+            int exitCode = proceso.waitFor();
+            System.out.println("[ALVARO] Exit code: " + exitCode);
+
+            obj.put("data", backupsArray);
+            obj.put("estado", "exito");
+            obj.put("cantidad", backupsArray.length());
+            System.out.println("[ALVARO] Se encontraron " + backupsArray.length() + " backups de backend");
+            System.out.println("[ALVARO] ========== COMPLETADO ==========");
+        } catch (Exception e) {
+            obj.put("estado", "error");
+            obj.put("error", e.getMessage());
+            System.out.println("[ALVARO] Error listando backups de backend: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    public static void verBackupFrontend(JSONObject obj, SSSessionAbstract session) {
+        try {
+            System.out.println("[ALVARO] ========== LISTANDO BACKUPS DE FRONTEND ==========");
+            String sshHost = "servisofts@192.168.2.5";
+            String remoteDir = "~/servicios/serp/entornos/serp";
+
+            String comando = "ssh \"" + sshHost + "\" \"cd " + remoteDir + " && ls -lhd build* 2>/dev/null | awk '{print \\$6, \\$7, \\$8, \\$9, \\\"(\\\" \\$5 \\\")\\\"}' \"";
+            System.out.println("[ALVARO] Ejecutando: " + comando);
+
+            ProcessBuilder pb = new ProcessBuilder("bash", "-c", comando);
+            pb.redirectErrorStream(true);
+            Process proceso = pb.start();
+
+            java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(proceso.getInputStream()));
+            JSONArray backupsArray = new JSONArray();
+            String linea;
+
+            while ((linea = reader.readLine()) != null) {
+                linea = linea.trim();
+                if (!linea.isEmpty()) {
+                    System.out.println("[ALVARO] Linea: " + linea);
+
+                    String[] partes = linea.split(" \\(");
+                    if (partes.length == 2) {
+                        String datosArchivo = partes[0].trim();
+                        String tamaño = partes[1].replace(")", "").trim();
+
+                        String[] dateAndFile = datosArchivo.split(" (?=build)");
+                        String fecha = dateAndFile[0].trim();
+                        String nombre = dateAndFile.length > 1 ? dateAndFile[1].trim() : "";
+
+                        JSONObject backupInfo = new JSONObject();
+                        backupInfo.put("nombre", nombre);
+                        backupInfo.put("ruta", remoteDir + "/" + nombre);
+                        backupInfo.put("tamaño", tamaño);
+                        backupInfo.put("tipo", "frontend");
+                        backupInfo.put("fecha", fecha);
+
+                        backupsArray.put(backupInfo);
+                    }
+                }
+            }
+
+            int exitCode = proceso.waitFor();
+            System.out.println("[ALVARO] Exit code: " + exitCode);
+
+            obj.put("data", backupsArray);
+            obj.put("estado", "exito");
+            obj.put("cantidad", backupsArray.length());
+            System.out.println("[ALVARO] Se encontraron " + backupsArray.length() + " backups de frontend");
+            System.out.println("[ALVARO] ========== COMPLETADO ==========");
+        } catch (Exception e) {
+            obj.put("estado", "error");
+            obj.put("error", e.getMessage());
+            System.out.println("[ALVARO] Error listando backups de frontend: " + e.getMessage());
             e.printStackTrace();
         }
     }
