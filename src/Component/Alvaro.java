@@ -255,7 +255,7 @@ public class Alvaro {
             String sshHost = "servisofts@192.168.2.5";
             String remoteDir = "/home/servisofts/servicios/serp/entornos/serp/servicios/serp";
 
-            String comando = "ssh \"" + sshHost + "\" \"ls -lh " + remoteDir + "/server*.jar 2>/dev/null\"";
+            String comando = "ssh \"" + sshHost + "\" \"ls -lh " + remoteDir + "/server.jar_* 2>/dev/null\"";
             System.out.println("[ALVARO] Ejecutando: " + comando);
 
             ProcessBuilder pb = new ProcessBuilder("bash", "-c", comando);
@@ -269,15 +269,18 @@ public class Alvaro {
             while ((linea = reader.readLine()) != null) {
                 linea = linea.trim();
                 if (!linea.isEmpty()) {
-                    System.out.println("[ALVARO] Linea: " + linea);
+                    System.out.println("[ALVARO] Linea raw: " + linea);
 
                     String[] partes = linea.split("\\s+");
+                    System.out.println("[ALVARO] Partes encontradas: " + partes.length);
+
                     if (partes.length >= 9) {
+                        String permisos = partes[0];
+                        String tamaño = partes[4];
                         String mes = partes[5];
                         String dia = partes[6];
                         String hora = partes[7];
                         String rutaArchivo = partes[8];
-                        String tamaño = partes[4];
                         String nombre = new java.io.File(rutaArchivo).getName();
                         String fecha = mes + " " + dia + " " + hora;
 
@@ -289,7 +292,9 @@ public class Alvaro {
                         backupInfo.put("fecha", fecha);
 
                         backupsArray.put(backupInfo);
-                        System.out.println("[ALVARO] Backup encontrado: " + nombre + " - " + tamaño + " - " + fecha);
+                        System.out.println("[ALVARO] ✓ Backup agregado: " + nombre + " | " + tamaño + " | " + fecha);
+                    } else {
+                        System.out.println("[ALVARO] ✗ Línea ignorada (partes insuficientes): " + partes.length);
                     }
                 }
             }
@@ -314,9 +319,9 @@ public class Alvaro {
         try {
             System.out.println("[ALVARO] ========== LISTANDO BACKUPS DE FRONTEND ==========");
             String sshHost = "servisofts@192.168.2.5";
-            String remoteDir = "~/servicios/serp/entornos/serp";
+            String remoteDir = "/home/servisofts/servicios/serp/entornos/serp";
 
-            String comando = "ssh \"" + sshHost + "\" \"cd " + remoteDir + " && ls -lhd build* 2>/dev/null | awk '{print \\$6, \\$7, \\$8, \\$9, \\\"(\\\" \\$5 \\\")\\\"}' \"";
+            String comando = "ssh \"" + sshHost + "\" \"ls -lhd " + remoteDir + "/build* 2>/dev/null\"";
             System.out.println("[ALVARO] Ejecutando: " + comando);
 
             ProcessBuilder pb = new ProcessBuilder("bash", "-c", comando);
@@ -330,25 +335,31 @@ public class Alvaro {
             while ((linea = reader.readLine()) != null) {
                 linea = linea.trim();
                 if (!linea.isEmpty()) {
-                    System.out.println("[ALVARO] Linea: " + linea);
+                    System.out.println("[ALVARO] Linea raw: " + linea);
 
-                    String[] partes = linea.split(" \\(");
-                    if (partes.length == 2) {
-                        String datosArchivo = partes[0].trim();
-                        String tamaño = partes[1].replace(")", "").trim();
+                    String[] partes = linea.split("\\s+");
+                    System.out.println("[ALVARO] Partes encontradas: " + partes.length);
 
-                        String[] dateAndFile = datosArchivo.split(" (?=build)");
-                        String fecha = dateAndFile[0].trim();
-                        String nombre = dateAndFile.length > 1 ? dateAndFile[1].trim() : "";
+                    if (partes.length >= 9) {
+                        String tamaño = partes[4];
+                        String mes = partes[5];
+                        String dia = partes[6];
+                        String hora = partes[7];
+                        String rutaArchivo = partes[8];
+                        String nombre = new java.io.File(rutaArchivo).getName();
+                        String fecha = mes + " " + dia + " " + hora;
 
                         JSONObject backupInfo = new JSONObject();
                         backupInfo.put("nombre", nombre);
-                        backupInfo.put("ruta", remoteDir + "/" + nombre);
+                        backupInfo.put("ruta", rutaArchivo);
                         backupInfo.put("tamaño", tamaño);
                         backupInfo.put("tipo", "frontend");
                         backupInfo.put("fecha", fecha);
 
                         backupsArray.put(backupInfo);
+                        System.out.println("[ALVARO] ✓ Backup agregado: " + nombre + " | " + tamaño + " | " + fecha);
+                    } else {
+                        System.out.println("[ALVARO] ✗ Línea ignorada (partes insuficientes): " + partes.length);
                     }
                 }
             }

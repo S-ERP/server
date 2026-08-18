@@ -22,6 +22,6 @@ fi
 
 echo -e "${CYAN}Backups disponibles en: $REMOTE_DIR${NC}"
 echo "=========================================="
-ssh "$SSH_HOST" "ls -lh $REMOTE_DIR/server_*.jar 2>/dev/null | awk '{print \$9, \"(\" \$5 \")\"}'"
+ssh "$SSH_HOST" "ls -lh $REMOTE_DIR/server.jar_* 2>/dev/null | awk '{print \$9, \"(\" \$5 \")\"}'"
 echo "=========================================="
-ssh "$SSH_HOST" "ls -1 $REMOTE_DIR/server_*.jar 2>/dev/null | wc -l" | xargs echo "Total de backups:"
+ssh "$SSH_HOST" "ls -1 $REMOTE_DIR/server.jar_* 2>/dev/null | wc -l" | xargs echo "Total de backups:"
