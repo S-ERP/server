@@ -42,11 +42,34 @@ ssh "$SSH_HOST" "cp $REMOTE_DIR/server.jar $REMOTE_DIR/server_$BACKUP_DATE.jar"
 
 echo -e "${GREEN}Backup creado: server_$BACKUP_DATE.jar${NC}"
 
-# --- 3) Subir el jar nuevo ---
-echo -e "${CYAN}[3/4] Subiendo server.jar nuevo...${NC}"
-scp ./server.jar "$SSH_HOST:$REMOTE_DIR/"
+# --- 3a) Actualizar config.json con las rutas de producción ---
+echo -e "${CYAN}[3a/5] Actualizando config.json con rutas de producción...${NC}"
 
-echo -e "${GREEN}server.jar subido.${NC}"
+# Rutas de producción (desde alvaro.env)
+SCRIPTS_DIR="${SCRIPTS_DIR:-/home/servisofts/servicios/serp/scripts}"
+BACKUPS_DIR="${BACKUPS_DIR:-/home/servisofts/servicios/serp/backups}"
+REMOTE_DIR_CONFIG="${REMOTE_DIR_CONFIG:-/home/servisofts/servicios/serp}"
+
+# Actualizar config.json localmente antes de subirlo
+jq --arg scripts_dir "$SCRIPTS_DIR" \
+   --arg backups_dir "$BACKUPS_DIR" \
+   --arg ssh_host "$SSH_HOST" \
+   --arg remote_dir "$REMOTE_DIR_CONFIG" \
+   '.alvaro = {
+       "scripts_dir": $scripts_dir,
+       "backups_dir": $backups_dir,
+       "ssh_host": $ssh_host,
+       "remote_dir": $remote_dir
+   }' config.json > config.json.tmp && mv config.json.tmp config.json
+
+echo -e "${GREEN}config.json actualizado con rutas de producción.${NC}"
+
+# --- 3b) Subir el jar nuevo ---
+echo -e "${CYAN}[3b/5] Subiendo server.jar y config.json nuevos...${NC}"
+scp ./server.jar "$SSH_HOST:$REMOTE_DIR/"
+scp ./config.json "$SSH_HOST:$REMOTE_DIR/"
+
+echo -e "${GREEN}server.jar y config.json subidos.${NC}"
 
 # --- 4) Reiniciar el servicio ---
 # Detiene y luego inicia el servicio con el nuevo jar

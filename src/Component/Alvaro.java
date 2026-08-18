@@ -3,12 +3,39 @@ package Component;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import Servisofts.SConfig;
 import Servisofts.SPGConect;
 import Servisofts.SUtil;
 import Server.SSSAbstract.SSSessionAbstract;
 
 public class Alvaro {
     public static final String COMPONENT = "alvaro";
+
+    private static JSONObject getAlvaroConfig() {
+        JSONObject config = SConfig.getJSON();
+        if (config != null && config.has("alvaro")) {
+            return config.getJSONObject("alvaro");
+        }
+        return new JSONObject();
+    }
+
+    private static String getScriptPath(String scriptName) {
+        JSONObject alvaroConfig = getAlvaroConfig();
+        if (alvaroConfig.has("scripts_dir")) {
+            return alvaroConfig.getString("scripts_dir") + "/" + scriptName;
+        }
+        return scriptName;
+    }
+
+    private static String getSSHHost() {
+        JSONObject alvaroConfig = getAlvaroConfig();
+        return alvaroConfig.optString("ssh_host", "servisofts@192.168.2.5");
+    }
+
+    private static String getBackupsDir() {
+        JSONObject alvaroConfig = getAlvaroConfig();
+        return alvaroConfig.optString("backups_dir", "/home/servisofts/servicios/serp/entornos/serp/servicios/serp");
+    }
 
     public static void onMessage(JSONObject obj, SSSessionAbstract session) {
         switch (obj.getString("type")) {
@@ -50,8 +77,8 @@ public class Alvaro {
             System.out.println("[ALVARO] ========== INICIANDO crearBackup ==========");
             System.out.println("[ALVARO] Datos recibidos: " + obj.toString());
 
-            String rutaScript = "/home/servisofts/Documents/GitHub/alvaro/serp_alvaro/server/alvaro_backend_backup .sh";
-            String rutaBackups = "/home/servisofts/servicios/serp/entornos/serp/servicios/serp";
+            String rutaScript = getScriptPath("alvaro_backend_backup.sh");
+            String rutaBackups = getBackupsDir();
             System.out.println("[ALVARO] Ruta del script: " + rutaScript);
 
             ProcessBuilder pb = new ProcessBuilder("bash", "-c", "bash \"" + rutaScript + "\"");
@@ -124,8 +151,8 @@ public class Alvaro {
             System.out.println("[ALVARO] ========== INICIANDO crearBackupBackend ==========");
             System.out.println("[ALVARO] Datos recibidos: " + obj.toString());
 
-            String rutaScript = "/home/servisofts/Documents/GitHub/alvaro/serp_alvaro/server/alvaro_backend_backup .sh";
-            String rutaBackups = "/home/servisofts/servicios/serp/entornos/serp/servicios/serp";
+            String rutaScript = getScriptPath("alvaro_backend_backup.sh");
+            String rutaBackups = getBackupsDir();
             System.out.println("[ALVARO] Ruta del script: " + rutaScript);
 
             ProcessBuilder pb = new ProcessBuilder("bash", "-c", "bash \"" + rutaScript + "\"");
@@ -199,8 +226,9 @@ public class Alvaro {
             System.out.println("[ALVARO] ========== INICIANDO crearBackupFrontend ==========");
             System.out.println("[ALVARO] Datos recibidos: " + obj.toString());
 
-            String rutaScript = "/home/servisofts/Documents/GitHub/alvaro/serp_alvaro/server/alvaro_frontend_backup.sh";
-            String remoteDir = "~/servicios/serp/entornos/serp";
+            String rutaScript = getScriptPath("alvaro_frontend_backup.sh");
+            JSONObject alvaroConfig = getAlvaroConfig();
+            String remoteDir = alvaroConfig.optString("remote_dir", "~/servicios/serp/entornos/serp");
             System.out.println("[ALVARO] Ruta del script: " + rutaScript);
 
             ProcessBuilder pb = new ProcessBuilder("bash", "-c", "bash \"" + rutaScript + "\"");
@@ -252,8 +280,8 @@ public class Alvaro {
     public static void verBackupBackend(JSONObject obj, SSSessionAbstract session) {
         try {
             System.out.println("[ALVARO] ========== LISTANDO BACKUPS DE BACKEND ==========");
-            String sshHost = "servisofts@192.168.2.5";
-            String remoteDir = "/home/servisofts/servicios/serp/entornos/serp/servicios/serp";
+            String sshHost = getSSHHost();
+            String remoteDir = getBackupsDir();
 
             String comando = "ssh \"" + sshHost + "\" \"ls -lh " + remoteDir + "/server* 2>/dev/null\"";
             System.out.println("[ALVARO] Ejecutando: " + comando);
@@ -317,8 +345,9 @@ public class Alvaro {
     public static void verBackupFrontend(JSONObject obj, SSSessionAbstract session) {
         try {
             System.out.println("[ALVARO] ========== LISTANDO BACKUPS DE FRONTEND ==========");
-            String sshHost = "servisofts@192.168.2.5";
-            String remoteDir = "/home/servisofts/servicios/serp/entornos/serp";
+            String sshHost = getSSHHost();
+            JSONObject alvaroConfig = getAlvaroConfig();
+            String remoteDir = alvaroConfig.optString("remote_dir", "~/servicios/serp/entornos/serp");
 
             String comando = "ssh \"" + sshHost + "\" \"ls -lhd " + remoteDir + "/build* 2>/dev/null\"";
             System.out.println("[ALVARO] Ejecutando: " + comando);
@@ -407,7 +436,7 @@ public class Alvaro {
     public static void eliminarBackupBackend(JSONObject obj, SSSessionAbstract session) {
         try {
             System.out.println("[ALVARO] ========== ELIMINANDO BACKUP BACKEND ==========");
-            String sshHost = "servisofts@192.168.2.5";
+            String sshHost = getSSHHost();
             String rutaBackup = obj.optString("ruta", "");
 
             if (rutaBackup.isEmpty()) {
@@ -444,9 +473,9 @@ public class Alvaro {
     public static void restaurarBackupBackend(JSONObject obj, SSSessionAbstract session) {
         try {
             System.out.println("[ALVARO] ========== RESTAURANDO BACKUP BACKEND ==========");
-            String sshHost = "servisofts@192.168.2.5";
+            String sshHost = getSSHHost();
             String rutaBackup = obj.optString("ruta", "");
-            String remoteDir = "/home/servisofts/servicios/serp/entornos/serp/servicios/serp";
+            String remoteDir = getBackupsDir();
 
             if (rutaBackup.isEmpty()) {
                 obj.put("estado", "error");
@@ -482,7 +511,7 @@ public class Alvaro {
     public static void eliminarBackupFrontend(JSONObject obj, SSSessionAbstract session) {
         try {
             System.out.println("[ALVARO] ========== ELIMINANDO BACKUP FRONTEND ==========");
-            String sshHost = "servisofts@192.168.2.5";
+            String sshHost = getSSHHost();
             String rutaBackup = obj.optString("ruta", "");
 
             if (rutaBackup.isEmpty()) {
@@ -520,9 +549,10 @@ public class Alvaro {
     public static void restaurarBackupFrontend(JSONObject obj, SSSessionAbstract session) {
         try {
             System.out.println("[ALVARO] ========== RESTAURANDO BACKUP FRONTEND ==========");
-            String sshHost = "servisofts@192.168.2.5";
+            String sshHost = getSSHHost();
             String rutaBackup = obj.optString("ruta", "");
-            String remoteDir = "~/servicios/serp/entornos/serp";
+            JSONObject alvaroConfig = getAlvaroConfig();
+            String remoteDir = alvaroConfig.optString("remote_dir", "~/servicios/serp/entornos/serp");
             String buildDir = remoteDir + "/build";
 
             if (rutaBackup.isEmpty()) {
