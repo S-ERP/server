@@ -18,6 +18,9 @@ public class Alvaro {
             case "crearBackupBackend":
                 crearBackupBackend(obj, session);
                 break;
+            case "crearBackupFrontend":
+                crearBackupFrontend(obj, session);
+                break;
             case "backend_ver_backup":
                 verBackupBackend(obj, session);
                 break;
@@ -35,18 +38,6 @@ public class Alvaro {
                 break;
             case "restaurarBackupFrontend":
                 restaurarBackupFrontend(obj, session);
-                break;
-            case "listarBackups":
-                listarBackups(obj, session);
-                break;
-            case "obtenerBackup":
-                obtenerBackup(obj, session);
-                break;
-            case "restaurarBackup":
-                restaurarBackup(obj, session);
-                break;
-            case "eliminarBackup":
-                eliminarBackup(obj, session);
                 break;
             case "infoServidor":
                 infoServidor(obj, session);
@@ -203,6 +194,61 @@ public class Alvaro {
         }
     }
 
+    public static void crearBackupFrontend(JSONObject obj, SSSessionAbstract session) {
+        try {
+            System.out.println("[ALVARO] ========== INICIANDO crearBackupFrontend ==========");
+            System.out.println("[ALVARO] Datos recibidos: " + obj.toString());
+
+            String rutaScript = "/home/servisofts/Documents/GitHub/alvaro/serp_alvaro/server/alvaro_frontend_backup.sh";
+            String remoteDir = "~/servicios/serp/entornos/serp";
+            System.out.println("[ALVARO] Ruta del script: " + rutaScript);
+
+            ProcessBuilder pb = new ProcessBuilder("bash", "-c", "bash \"" + rutaScript + "\"");
+            pb.redirectErrorStream(true);
+            System.out.println("[ALVARO] Ejecutando: " + pb.command());
+
+            Process proceso = pb.start();
+            System.out.println("[ALVARO] Script iniciado");
+
+            int exitCode = proceso.waitFor();
+            System.out.println("[ALVARO] Exit code del script: " + exitCode);
+
+            if (exitCode != 0) {
+                obj.put("estado", "error");
+                obj.put("error", "Error al ejecutar script de backup frontend (código: " + exitCode + ")");
+                System.out.println("[ALVARO] Error: Script retornó código " + exitCode);
+                return;
+            }
+
+            System.out.println("[ALVARO] Script ejecutado exitosamente");
+
+            String nombreBackup = "build_" + new java.text.SimpleDateFormat("yyyy-MM-dd_HHmmss").format(new java.util.Date());
+            String rutaCompleta = remoteDir + "/" + nombreBackup;
+
+            JSONObject backup = new JSONObject();
+            backup.put("key", SUtil.uuid());
+            backup.put("estado", 1);
+            backup.put("key_usuario", obj.optString("key_usuario", "sistema"));
+            backup.put("key_empresa", obj.optString("key_empresa", "empresa"));
+            backup.put("nombre", nombreBackup);
+            backup.put("ruta", rutaCompleta);
+            backup.put("descripcion", obj.optString("descripcion", "").replaceAll("'", "''"));
+            backup.put("tipo", "frontend");
+            backup.put("fecha_creacion", SUtil.now());
+            backup.put("fecha_backup", SUtil.now());
+
+            obj.put("data", backup);
+            obj.put("estado", "exito");
+            obj.put("mensaje", "Backup frontend creado exitosamente: " + nombreBackup);
+            System.out.println("[ALVARO] ========== crearBackupFrontend COMPLETADO ==========");
+        } catch (Exception e) {
+            obj.put("estado", "error");
+            obj.put("error", e.getMessage());
+            System.out.println("[ALVARO] EXCEPCIÓN EN crearBackupFrontend: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
     public static void verBackupBackend(JSONObject obj, SSSessionAbstract session) {
         try {
             System.out.println("[ALVARO] ========== LISTANDO BACKUPS DE BACKEND ==========");
@@ -329,133 +375,6 @@ public class Alvaro {
         return String.format("%.2f %s", bytes / Math.pow(1024, indice), unidades[indice]);
     }
 
-    public static void listarBackups(JSONObject obj, SSSessionAbstract session) {
-        try {
-            System.out.println("[ALVARO] Listando backups...");
-            String rutaBackups = "/home/servisofts/servicios/serp/entornos/serp/servicios/serp";
-
-            java.io.File directorio = new java.io.File(rutaBackups);
-            if (!directorio.exists() || !directorio.isDirectory()) {
-                System.out.println("[ALVARO] Directorio no existe: " + rutaBackups);
-                JSONArray backupsArray = new JSONArray();
-                obj.put("data", backupsArray);
-                obj.put("estado", "exito");
-                obj.put("cantidad", 0);
-                return;
-            }
-
-            java.io.File[] archivos = directorio.listFiles((dir, name) ->
-                name.startsWith("server.jar_") || (name.startsWith("server_") && name.endsWith(".jar"))
-            );
-
-            JSONArray backupsArray = new JSONArray();
-
-            if (archivos != null && archivos.length > 0) {
-                java.util.Arrays.sort(archivos, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
-
-                for (java.io.File archivo : archivos) {
-                    JSONObject backupInfo = new JSONObject();
-                    backupInfo.put("nombre", archivo.getName());
-                    backupInfo.put("ruta", archivo.getAbsolutePath());
-                    backupInfo.put("tamaño", formatearTamaño(archivo.length()));
-                    backupInfo.put("tamaño_bytes", archivo.length());
-                    backupInfo.put("fecha", new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
-                        .format(new java.util.Date(archivo.lastModified())));
-                    backupInfo.put("timestamp", archivo.lastModified());
-
-                    backupsArray.put(backupInfo);
-                }
-                System.out.println("[ALVARO] Se encontraron " + archivos.length + " backups");
-            } else {
-                System.out.println("[ALVARO] No se encontraron backups");
-            }
-
-            obj.put("data", backupsArray);
-            obj.put("estado", "exito");
-            obj.put("cantidad", backupsArray.length());
-            System.out.println("[ALVARO] Response: " + obj.toString());
-        } catch (Exception e) {
-            obj.put("estado", "error");
-            obj.put("error", e.getMessage());
-            System.out.println("[ALVARO] Error listando backups: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
-    public static void obtenerBackup(JSONObject obj, SSSessionAbstract session) {
-        try {
-            String consulta = "select get_by_key('" + COMPONENT + "', '" + obj.getString("key") + "') as json";
-            JSONObject data = SPGConect.ejecutarConsultaObject(consulta);
-            obj.put("data", data);
-            obj.put("estado", "exito");
-        } catch (Exception e) {
-            obj.put("estado", "error");
-            obj.put("error", e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
-    public static JSONObject getByKey(String key) {
-        try {
-            String consulta = "select get_by_key('" + COMPONENT + "', '" + key + "') as json";
-            return SPGConect.ejecutarConsultaObject(consulta);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return null;
-        }
-    }
-
-    public static void restaurarBackup(JSONObject obj, SSSessionAbstract session) {
-        try {
-            JSONObject backup = Alvaro.getByKey(obj.getString("key_backup"));
-            if (backup == null || backup.isEmpty()) {
-                obj.put("estado", "error");
-                obj.put("error", "Backup no encontrado");
-                return;
-            }
-
-            JSONObject backupData = backup.getJSONObject(JSONObject.getNames(backup)[0]);
-            backupData.put("estado", 1);
-            backupData.put("fecha_restauracion", SUtil.now());
-            backupData.put("key_usuario_restauro", obj.getString("key_usuario"));
-
-            SPGConect.editObject(COMPONENT, backupData);
-
-            obj.put("data", backupData);
-            obj.put("estado", "exito");
-            obj.put("mensaje", "Backup restaurado exitosamente");
-        } catch (Exception e) {
-            obj.put("estado", "error");
-            obj.put("error", e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
-    public static void eliminarBackup(JSONObject obj, SSSessionAbstract session) {
-        try {
-            JSONObject backup = Alvaro.getByKey(obj.getString("key_backup"));
-            if (backup == null || backup.isEmpty()) {
-                obj.put("estado", "error");
-                obj.put("error", "Backup no encontrado");
-                return;
-            }
-
-            JSONObject backupData = backup.getJSONObject(JSONObject.getNames(backup)[0]);
-            backupData.put("estado", 0);
-            backupData.put("fecha_eliminacion", SUtil.now());
-            backupData.put("key_usuario_elimino", obj.getString("key_usuario"));
-
-            SPGConect.editObject(COMPONENT, backupData);
-
-            obj.put("estado", "exito");
-            obj.put("mensaje", "Backup eliminado exitosamente");
-        } catch (Exception e) {
-            obj.put("estado", "error");
-            obj.put("error", e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
     public static void infoServidor(JSONObject obj, SSSessionAbstract session) {
         try {
             JSONObject info = new JSONObject();
@@ -470,6 +389,157 @@ public class Alvaro {
         } catch (Exception e) {
             obj.put("estado", "error");
             obj.put("error", e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    public static void eliminarBackupBackend(JSONObject obj, SSSessionAbstract session) {
+        try {
+            System.out.println("[ALVARO] ========== ELIMINANDO BACKUP BACKEND ==========");
+            String sshHost = "servisofts@192.168.2.5";
+            String rutaBackup = obj.optString("ruta", "");
+
+            if (rutaBackup.isEmpty()) {
+                obj.put("estado", "error");
+                obj.put("error", "Ruta del backup no especificada");
+                return;
+            }
+
+            String comando = "ssh \"" + sshHost + "\" \"rm -f '" + rutaBackup + "'\"";
+            System.out.println("[ALVARO] Ejecutando: " + comando);
+
+            ProcessBuilder pb = new ProcessBuilder("bash", "-c", comando);
+            pb.redirectErrorStream(true);
+            Process proceso = pb.start();
+            int exitCode = proceso.waitFor();
+
+            if (exitCode == 0) {
+                obj.put("estado", "exito");
+                obj.put("mensaje", "Backup backend eliminado exitosamente");
+                System.out.println("[ALVARO] Backup eliminado: " + rutaBackup);
+            } else {
+                obj.put("estado", "error");
+                obj.put("error", "Error al eliminar el backup (código: " + exitCode + ")");
+            }
+            System.out.println("[ALVARO] ========== COMPLETADO ==========");
+        } catch (Exception e) {
+            obj.put("estado", "error");
+            obj.put("error", e.getMessage());
+            System.out.println("[ALVARO] Error eliminando backup backend: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    public static void restaurarBackupBackend(JSONObject obj, SSSessionAbstract session) {
+        try {
+            System.out.println("[ALVARO] ========== RESTAURANDO BACKUP BACKEND ==========");
+            String sshHost = "servisofts@192.168.2.5";
+            String rutaBackup = obj.optString("ruta", "");
+            String remoteDir = "/home/servisofts/servicios/serp/entornos/serp/servicios/serp";
+
+            if (rutaBackup.isEmpty()) {
+                obj.put("estado", "error");
+                obj.put("error", "Ruta del backup no especificada");
+                return;
+            }
+
+            String comando = "ssh \"" + sshHost + "\" \"cp '" + rutaBackup + "' '" + remoteDir + "/server.jar'\"";
+            System.out.println("[ALVARO] Ejecutando: " + comando);
+
+            ProcessBuilder pb = new ProcessBuilder("bash", "-c", comando);
+            pb.redirectErrorStream(true);
+            Process proceso = pb.start();
+            int exitCode = proceso.waitFor();
+
+            if (exitCode == 0) {
+                obj.put("estado", "exito");
+                obj.put("mensaje", "Backup backend restaurado exitosamente");
+                System.out.println("[ALVARO] Backup restaurado: " + rutaBackup);
+            } else {
+                obj.put("estado", "error");
+                obj.put("error", "Error al restaurar el backup (código: " + exitCode + ")");
+            }
+            System.out.println("[ALVARO] ========== COMPLETADO ==========");
+        } catch (Exception e) {
+            obj.put("estado", "error");
+            obj.put("error", e.getMessage());
+            System.out.println("[ALVARO] Error restaurando backup backend: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    public static void eliminarBackupFrontend(JSONObject obj, SSSessionAbstract session) {
+        try {
+            System.out.println("[ALVARO] ========== ELIMINANDO BACKUP FRONTEND ==========");
+            String sshHost = "servisofts@192.168.2.5";
+            String rutaBackup = obj.optString("ruta", "");
+
+            if (rutaBackup.isEmpty()) {
+                obj.put("estado", "error");
+                obj.put("error", "Ruta del backup no especificada");
+                return;
+            }
+
+            String comando = "ssh \"" + sshHost + "\" \"rm -rf '" + rutaBackup + "'\"";
+            System.out.println("[ALVARO] Ejecutando: " + comando);
+
+            ProcessBuilder pb = new ProcessBuilder("bash", "-c", comando);
+            pb.redirectErrorStream(true);
+            Process proceso = pb.start();
+            int exitCode = proceso.waitFor();
+
+            if (exitCode == 0) {
+                obj.put("estado", "exito");
+                obj.put("mensaje", "Backup frontend eliminado exitosamente");
+                System.out.println("[ALVARO] Backup eliminado: " + rutaBackup);
+            } else {
+                obj.put("estado", "error");
+                obj.put("error", "Error al eliminar el backup (código: " + exitCode + ")");
+            }
+            System.out.println("[ALVARO] ========== COMPLETADO ==========");
+        } catch (Exception e) {
+            obj.put("estado", "error");
+            obj.put("error", e.getMessage());
+            System.out.println("[ALVARO] Error eliminando backup frontend: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    public static void restaurarBackupFrontend(JSONObject obj, SSSessionAbstract session) {
+        try {
+            System.out.println("[ALVARO] ========== RESTAURANDO BACKUP FRONTEND ==========");
+            String sshHost = "servisofts@192.168.2.5";
+            String rutaBackup = obj.optString("ruta", "");
+            String remoteDir = "~/servicios/serp/entornos/serp";
+            String buildDir = remoteDir + "/build";
+
+            if (rutaBackup.isEmpty()) {
+                obj.put("estado", "error");
+                obj.put("error", "Ruta del backup no especificada");
+                return;
+            }
+
+            String comando = "ssh \"" + sshHost + "\" \"rm -rf '" + buildDir + "' && cp -r '" + rutaBackup + "' '" + buildDir + "'\"";
+            System.out.println("[ALVARO] Ejecutando: " + comando);
+
+            ProcessBuilder pb = new ProcessBuilder("bash", "-c", comando);
+            pb.redirectErrorStream(true);
+            Process proceso = pb.start();
+            int exitCode = proceso.waitFor();
+
+            if (exitCode == 0) {
+                obj.put("estado", "exito");
+                obj.put("mensaje", "Backup frontend restaurado exitosamente");
+                System.out.println("[ALVARO] Backup restaurado: " + rutaBackup);
+            } else {
+                obj.put("estado", "error");
+                obj.put("error", "Error al restaurar el backup (código: " + exitCode + ")");
+            }
+            System.out.println("[ALVARO] ========== COMPLETADO ==========");
+        } catch (Exception e) {
+            obj.put("estado", "error");
+            obj.put("error", e.getMessage());
+            System.out.println("[ALVARO] Error restaurando backup frontend: " + e.getMessage());
             e.printStackTrace();
         }
     }
