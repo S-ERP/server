@@ -9,6 +9,7 @@ import Server.SSSAbstract.SSSessionAbstract;
 
 public class Alvaro {
     public static final String COMPONENT = "alvaro";
+    public static boolean activaProduccion = true;
 
     public static void onMessage(JSONObject obj, SSSessionAbstract session) {
         switch (obj.getString("type")) {
@@ -267,7 +268,8 @@ public class Alvaro {
             String sshHost = "servisofts@192.168.2.5";
             String remoteDir = "/home/servisofts/servicios/serp/entornos/serp/servicios/serp";
 
-            String comando = "ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no \"" + sshHost + "\" \"ls -lh " + remoteDir + "/server* 2>/dev/null\"";
+            String comando = "ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no \"" + sshHost + "\" \"ls -lh "
+                    + remoteDir + "/server* 2>/dev/null\"";
             System.out.println("[ALVARO] Ejecutando: " + comando);
 
             ProcessBuilder pb = new ProcessBuilder("bash", "-c", comando);
