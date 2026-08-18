@@ -8,7 +8,7 @@
     "compra_venta": true,
     "sqr": true,
     "roles_permisos": true,
-    "chat": true,
+    "chat": false,
     "usuario": true,
     "caja": true,
     "drive": true,
@@ -17,5 +17,5 @@
     "crm": true
   },
   "- SLog": "RealTime Log from server Servisofts",
-  "- Fecha": "2026-08-17T23:45:01.722-04:00"
+  "- Fecha": "2026-08-18T00:18:11.941-04:00"
 }

@@ -255,7 +255,7 @@ public class Alvaro {
             String sshHost = "servisofts@192.168.2.5";
             String remoteDir = "/home/servisofts/servicios/serp/entornos/serp/servicios/serp";
 
-            String comando = "ssh \"" + sshHost + "\" \"ls -lh " + remoteDir + "/server*.jar 2>/dev/null | awk '{print \\$6, \\$7, \\$8, \\$9, \\\"(\\\" \\$5 \\\")\\\"}' \"";
+            String comando = "ssh \"" + sshHost + "\" \"ls -lh " + remoteDir + "/server*.jar 2>/dev/null\"";
             System.out.println("[ALVARO] Ejecutando: " + comando);
 
             ProcessBuilder pb = new ProcessBuilder("bash", "-c", comando);
@@ -271,24 +271,25 @@ public class Alvaro {
                 if (!linea.isEmpty()) {
                     System.out.println("[ALVARO] Linea: " + linea);
 
-                    String[] partes = linea.split(" \\(");
-                    if (partes.length == 2) {
-                        String datosArchivo = partes[0].trim();
-                        String tamaño = partes[1].replace(")", "").trim();
-
-                        String[] dateAndFile = datosArchivo.split(" (?=[^ ]*\\.jar)");
-                        String fecha = dateAndFile[0].trim();
-                        String ruta = dateAndFile.length > 1 ? dateAndFile[1].trim() : "";
-                        String nombre = new java.io.File(ruta).getName();
+                    String[] partes = linea.split("\\s+");
+                    if (partes.length >= 9) {
+                        String mes = partes[5];
+                        String dia = partes[6];
+                        String hora = partes[7];
+                        String rutaArchivo = partes[8];
+                        String tamaño = partes[4];
+                        String nombre = new java.io.File(rutaArchivo).getName();
+                        String fecha = mes + " " + dia + " " + hora;
 
                         JSONObject backupInfo = new JSONObject();
                         backupInfo.put("nombre", nombre);
-                        backupInfo.put("ruta", ruta);
+                        backupInfo.put("ruta", rutaArchivo);
                         backupInfo.put("tamaño", tamaño);
                         backupInfo.put("tipo", "backend");
                         backupInfo.put("fecha", fecha);
 
                         backupsArray.put(backupInfo);
+                        System.out.println("[ALVARO] Backup encontrado: " + nombre + " - " + tamaño + " - " + fecha);
                     }
                 }
             }
@@ -480,7 +481,8 @@ public class Alvaro {
                 return;
             }
 
-            String comando = "ssh \"" + sshHost + "\" \"rm -rf '" + rutaBackup + "'\"";
+            String rutaAbsoluta = rutaBackup.replace("~/", "/home/servisofts/");
+            String comando = "ssh \"" + sshHost + "\" \"rm -rf '" + rutaAbsoluta + "'\"";
             System.out.println("[ALVARO] Ejecutando: " + comando);
 
             ProcessBuilder pb = new ProcessBuilder("bash", "-c", comando);
@@ -491,7 +493,7 @@ public class Alvaro {
             if (exitCode == 0) {
                 obj.put("estado", "exito");
                 obj.put("mensaje", "Backup frontend eliminado exitosamente");
-                System.out.println("[ALVARO] Backup eliminado: " + rutaBackup);
+                System.out.println("[ALVARO] Backup eliminado: " + rutaAbsoluta);
             } else {
                 obj.put("estado", "error");
                 obj.put("error", "Error al eliminar el backup (código: " + exitCode + ")");
