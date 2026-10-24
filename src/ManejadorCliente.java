@@ -3,6 +3,7 @@ import org.json.JSONObject;
 
 import Component.Tarea;
 import Component.Wtspp;
+import Component.ZKTeco;
 import Servisofts.SConsole;
 import SocketCliente.SocketCliente;
 
@@ -30,6 +31,10 @@ public class ManejadorCliente {
         switch (data.getString("component")) {
             case "usuario":
                 usuario(data, config);
+                break;
+            case ZKTeco.LECTOR_HUELLA:
+            case ZKTeco.DISPOSITIVO:
+                ZKTeco.onMessageCliente(data);
                 break;
         }
     }

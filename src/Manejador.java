@@ -57,6 +57,8 @@ public class Manejador {
             case Pizarra.COMPONENT: Pizarra.onMessage(obj, session); break;
             case Habilidad.COMPONENT: Habilidad.onMessage(obj, session); break;
             case HabilidadUsuario.COMPONENT: HabilidadUsuario.onMessage(obj, session); break;
+            case ZKTeco.LECTOR_HUELLA: ZKTeco.onMessage(obj, session); break;
+            case ZKTecoAccesos.COMPONENT: ZKTecoAccesos.onMessage(obj, session); break;
             case "listener": listener(obj, session); break;
         }
 
