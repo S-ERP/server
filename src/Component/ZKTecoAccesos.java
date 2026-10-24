@@ -1,9 +1,11 @@
 package Component;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -17,6 +19,7 @@ import SocketCliente.SocketCliente;
 //  - Clientes con una suscripcion vigente en esa sucursal (estado 1, fecha_inicio <= hoy <= fecha_fin, el dia de fecha_fin cuenta).
 //  - Personal con el permiso /molinete -> acceso por algun rol de la empresa, y activo en la empresa.
 // La lista "keys" es lo que se carga en el molinete (zkteco guarda la huella con key_usuario = key del cliente o usuario).
+// zkteco/sincronizarMolinete (key_sucursal) la carga en los molinetes de la sucursal; ZKTecoTask lo repite cada dia.
 public class ZKTecoAccesos {
     public static final String COMPONENT = "zkteco";
     public static final String URL_PERMISO = "/molinete";
@@ -26,6 +29,12 @@ public class ZKTecoAccesos {
         switch (obj.getString("type")) {
             case "accesos":
                 accesos(obj);
+                break;
+            case "sincronizarMolinete":
+                sincronizarMolinete(obj);
+                break;
+            case "testConnection":
+                testConnection(obj);
                 break;
         }
     }
@@ -39,6 +48,84 @@ public class ZKTecoAccesos {
             obj.put("error", e.getMessage());
             e.printStackTrace();
         }
+    }
+
+    // zkteco responde dispositivo/testConnection con noSend:true y este servidor descartaria la respuesta
+    // al reenviarla al cliente; aqui se consulta de forma sincrona y se devuelve siempre el resultado.
+    public static void testConnection(JSONObject obj) {
+        try {
+            JSONObject resp = SocketCliente.sendSinc("zkteco", new JSONObject()
+                    .put("component", "dispositivo").put("type", "testConnection").put("estado", "cargando")
+                    .put("key_dispositivo", obj.getString("key_dispositivo"))
+                    .put("key_punto_venta", obj.optString("key_punto_venta")), 20000);
+            obj.put("estado", resp == null ? "error" : resp.optString("estado", "error"));
+            if (resp == null) obj.put("error", "El punto de venta no respondio");
+            else if (resp.has("error")) obj.put("error", resp.optString("error"));
+        } catch (Exception e) {
+            obj.put("estado", "error");
+            obj.put("error", e.getMessage());
+        }
+        obj.put("noSend", false);
+    }
+
+    public static void sincronizarMolinete(JSONObject obj) {
+        try {
+            obj.put("data", sincronizar(obj.getString("key_sucursal")));
+            obj.put("estado", "exito");
+        } catch (Exception e) {
+            obj.put("estado", "error");
+            obj.put("error", e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    // Carga la lista de accesos en cada molinete de la sucursal: zkteco actualiza usuario_dispositivo
+    // (delete_all saca a los que ya no tienen acceso) y se la manda al lector.
+    public static JSONArray sincronizar(String key_sucursal) throws Exception {
+        JSONArray keys = getAccesos(key_sucursal).getJSONArray("keys");
+        JSONArray resultado = new JSONArray();
+        for (JSONObject d : getDispositivos(key_sucursal)) {
+            JSONObject r = new JSONObject().put("key_dispositivo", d.getString("key"))
+                    .put("descripcion", d.optString("descripcion")).put("usuarios", keys.length());
+            try {
+                request("zkteco", new JSONObject().put("component", "dispositivo").put("type", "sincronizarMolinete")
+                        .put("key_dispositivo", d.getString("key")).put("data", keys).put("delete_all", true), 600000);
+                r.put("estado", "exito");
+            } catch (Exception e) {
+                r.put("estado", "error").put("error", e.getMessage());
+            }
+            resultado.put(r);
+        }
+        return resultado;
+    }
+
+    // Dispositivos activos de los puntos de venta de la sucursal.
+    // No se usa punto_venta/getMolinetesByKeySucursal: get_dispositivos_key_sucursal tiene una sucursal fija.
+    public static List<JSONObject> getDispositivos(String key_sucursal) throws Exception {
+        List<JSONObject> dispositivos = new ArrayList<>();
+        for (Object o : valores(request("zkteco", new JSONObject()
+                .put("component", "punto_venta").put("type", "getAll")).opt("data"))) {
+            JSONObject pv = (JSONObject) o;
+            if (!key_sucursal.equals(pv.optString("key_sucursal")) || pv.optInt("estado") <= 0) continue;
+            for (Object d : valores(request("zkteco", new JSONObject().put("component", "dispositivo")
+                    .put("type", "getAll").put("key_punto_venta", pv.getString("key"))).opt("data"))) {
+                if (((JSONObject) d).optInt("estado") > 0) dispositivos.add((JSONObject) d);
+            }
+        }
+        return dispositivos;
+    }
+
+    // Sucursales de los puntos de venta zkteco que reportan a este servicio (punto_venta.key_servicio).
+    public static Set<String> getSucursales(String key_servicio) throws Exception {
+        Set<String> sucursales = new HashSet<>();
+        for (Object o : valores(request("zkteco", new JSONObject()
+                .put("component", "punto_venta").put("type", "getAll")).opt("data"))) {
+            JSONObject pv = (JSONObject) o;
+            if (key_servicio.equals(pv.optString("key_servicio")) && pv.optInt("estado") > 0
+                    && !pv.optString("key_sucursal").isEmpty())
+                sucursales.add(pv.getString("key_sucursal"));
+        }
+        return sucursales;
     }
 
     public static JSONObject getAccesos(String key_sucursal) throws Exception {
@@ -133,11 +220,11 @@ public class ZKTecoAccesos {
         return new JSONArray(personal.values());
     }
 
-    private static JSONObject request(String service, JSONObject send) throws Exception {
+    static JSONObject request(String service, JSONObject send) throws Exception {
         return request(service, send, 20000);
     }
 
-    private static JSONObject request(String service, JSONObject send, int timeOut) throws Exception {
+    static JSONObject request(String service, JSONObject send, int timeOut) throws Exception {
         send.put("estado", "cargando");
         JSONObject resp = SocketCliente.sendSinc(service, send, timeOut);
         if (resp == null || !"exito".equals(resp.optString("estado")))
@@ -155,7 +242,7 @@ public class ZKTecoAccesos {
     }
 
     // data puede venir como objeto {key: fila} o como arreglo de filas.
-    private static JSONArray valores(Object data) {
+    static JSONArray valores(Object data) {
         JSONArray arr = new JSONArray();
         if (data instanceof JSONArray) return (JSONArray) data;
         if (data instanceof JSONObject) {

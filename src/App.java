@@ -6,6 +6,7 @@ import Servisofts.Servisofts;
 import Servisofts.http.Rest;
 import Tasks.EmpresaTask;
 import Tasks.TareaTask;
+import Tasks.ZKTecoTask;
 
 public class App {
 
@@ -21,6 +22,7 @@ public class App {
 
             new TareaTask();
             new EmpresaTask();
+            new ZKTecoTask();
             Servisofts.initialize();
 
         } catch (Exception e) {

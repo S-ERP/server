@@ -4,6 +4,7 @@ import org.json.JSONObject;
 import Component.Tarea;
 import Component.Wtspp;
 import Component.ZKTeco;
+import Component.ZKTecoAsistencia;
 import Servisofts.SConsole;
 import SocketCliente.SocketCliente;
 
@@ -35,6 +36,7 @@ public class ManejadorCliente {
             case ZKTeco.LECTOR_HUELLA:
             case ZKTeco.DISPOSITIVO:
                 ZKTeco.onMessageCliente(data);
+                ZKTecoAsistencia.onMessageCliente(data);
                 break;
         }
     }
