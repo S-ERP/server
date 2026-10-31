@@ -1,5 +1,6 @@
 package Component;
 
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
@@ -8,10 +9,15 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.Base64;
 
+import javax.crypto.Cipher;
+import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 import Server.SSSAbstract.SSSessionAbstract;
+import Servisofts.SConfig;
 import Servisofts.SPGConect;
 import Servisofts.SUtil;
 import SocketCliente.SocketCliente;
@@ -19,24 +25,33 @@ import SocketCliente.SocketCliente;
 /**
  * Tokens de acceso al MCP de S-ERP (tabla mcp_token).
  *
- * registro  {key_usuario, key_empresa, data:{descripcion, alcance, fecha_vencimiento?}} -> data.token (solo esta vez)
- * getAll    {key_usuario, key_empresa}  -> tokens de la empresa, sin hash
+ * Cada token es de UN usuario (key_usuario): el MCP actúa como ese usuario, con sus permisos, en una empresa.
+ * key_usuario_creador es quien lo generó (puede ser otro usuario, con el permiso PAGE/otro_usuario).
+ *
+ * registro  {key_usuario, key_empresa, data:{descripcion, alcance, fecha_vencimiento?, key_usuario_token?}} -> data.token
+ * getAll    {key_usuario, key_empresa}       -> tokens de la empresa, sin hash ni token
+ * ver       {key_usuario, key_empresa, key}  -> data.token (dueño, creador o PAGE/otro_usuario)
  * anular    {key_usuario, key_empresa, key}
  * validar   {token}  -> {key, key_empresa, key_usuario, alcance, descripcion}  (lo usa el MCP)
  *
- * Gestionar tokens requiere el permiso PAGE/new (crear, anular) o PAGE/ver (listar) en roles_permisos.
+ * Permisos en roles_permisos: PAGE ver (listar y ver los propios), new (crear), delete (anular),
+ * otro_usuario (crear y ver tokens de otros usuarios).
+ * El token se guarda como SHA-256 (para validar) y cifrado con AES-GCM (para poder mostrarlo); la clave está en
+ * config.json -> mcp.token_secret (base64 de 32 bytes).
  */
 public class McpToken {
     public static final String COMPONENT = "mcp_token";
     public static final String PAGE = "/empresa/mcp";
     private static final String PREFIJO = "smcp_";
     private static final SecureRandom RANDOM = new SecureRandom();
+    private static final String OCULTOS = " - 'token_hash' - 'token_cifrado'";
 
     public static void onMessage(JSONObject obj, SSSessionAbstract session) {
         try {
             switch (obj.getString("type")) {
                 case "registro": registro(obj); break;
                 case "getAll": getAll(obj); break;
+                case "ver": ver(obj); break;
                 case "anular": anular(obj); break;
                 case "validar": validar(obj); break;
                 default: return;
@@ -50,8 +65,9 @@ public class McpToken {
 
     static void registro(JSONObject obj) throws Exception {
         String key_empresa = uuid(obj, "key_empresa");
-        String key_usuario = uuid(obj, "key_usuario");
-        exigirPermiso(key_usuario, key_empresa, "new");
+        String creador = uuid(obj, "key_usuario");
+        JSONObject permisos = permisos(creador, key_empresa);
+        exigir(permisos, "new");
 
         JSONObject data = obj.optJSONObject("data");
         if (data == null) data = new JSONObject();
@@ -59,6 +75,12 @@ public class McpToken {
         if (!alcance.equals("lectura") && !alcance.equals("escritura")) throw new Exception("alcance inválido");
         String descripcion = data.optString("descripcion", "").trim();
         if (descripcion.isEmpty()) throw new Exception("La descripción es requerida");
+
+        String dueno = data.optString("key_usuario_token", "").isEmpty() ? creador : uuid(data, "key_usuario_token");
+        if (!dueno.equals(creador)) {
+            exigir(permisos, "otro_usuario");
+            if (!activoEnEmpresa(dueno, key_empresa)) throw new Exception("El usuario no está activo en la empresa");
+        }
 
         byte[] bytes = new byte[32];
         RANDOM.nextBytes(bytes);
@@ -68,32 +90,49 @@ public class McpToken {
                 .put("key", SUtil.uuid())
                 .put("estado", 1)
                 .put("fecha_on", SUtil.now())
-                .put("key_usuario", key_usuario)
+                .put("key_usuario", dueno)
+                .put("key_usuario_creador", creador)
                 .put("key_empresa", key_empresa)
                 .put("descripcion", descripcion)
                 .put("alcance", alcance)
                 .put("token_hash", sha256(token))
+                .put("token_cifrado", cifrar(token))
                 .put("token_prefijo", token.substring(0, PREFIJO.length() + 6));
         if (!data.optString("fecha_vencimiento", "").isEmpty()) row.put("fecha_vencimiento", data.getString("fecha_vencimiento"));
         SPGConect.insertArray2(COMPONENT, new JSONArray().put(row));
 
         row.remove("token_hash");
+        row.remove("token_cifrado");
         row.put("token", token);
         obj.put("data", row);
     }
 
     static void getAll(JSONObject obj) throws Exception {
         String key_empresa = uuid(obj, "key_empresa");
-        exigirPermiso(uuid(obj, "key_usuario"), key_empresa, "ver");
+        exigir(permisos(uuid(obj, "key_usuario"), key_empresa), "ver");
         obj.put("data", consulta(
-                "select coalesce(json_object_agg(t.key, to_jsonb(t) - 'token_hash'), '{}') as json from mcp_token t where t.key_empresa = ?",
+                "select coalesce(json_object_agg(t.key, to_jsonb(t)" + OCULTOS
+                        + " || jsonb_build_object('visible', t.token_cifrado is not null)), '{}') as json from mcp_token t where t.key_empresa = ?",
                 key_empresa));
+    }
+
+    static void ver(JSONObject obj) throws Exception {
+        String key_empresa = uuid(obj, "key_empresa");
+        String key_usuario = uuid(obj, "key_usuario");
+        JSONObject permisos = permisos(key_usuario, key_empresa);
+        exigir(permisos, "ver");
+        JSONObject t = consulta("select to_jsonb(t) as json from mcp_token t where t.key = ?", uuid(obj, "key"));
+        if (t.isEmpty() || !key_empresa.equals(t.optString("key_empresa"))) throw new Exception("Token no encontrado");
+        boolean propio = key_usuario.equals(t.optString("key_usuario")) || key_usuario.equals(t.optString("key_usuario_creador"));
+        if (!propio) exigir(permisos, "otro_usuario");
+        if (t.optString("token_cifrado", "").isEmpty()) throw new Exception("Este token se creó antes de poder mostrarse: anúlelo y cree otro");
+        obj.put("data", new JSONObject().put("key", t.getString("key")).put("token", descifrar(t.getString("token_cifrado"))));
     }
 
     static void anular(JSONObject obj) throws Exception {
         String key_empresa = uuid(obj, "key_empresa");
         String key_usuario = uuid(obj, "key_usuario");
-        exigirPermiso(key_usuario, key_empresa, "delete");
+        exigir(permisos(key_usuario, key_empresa), "delete");
         int n = actualizar("update mcp_token set estado = 0, key_usuario_anulacion = ?, fecha_anulacion = now() "
                 + "where key = ? and key_empresa = ? and estado > 0", key_usuario, uuid(obj, "key"), key_empresa);
         if (n == 0) throw new Exception("Token no encontrado");
@@ -103,7 +142,7 @@ public class McpToken {
         String token = obj.optString("token", "");
         if (!token.startsWith(PREFIJO)) throw new Exception("token inválido");
         JSONObject data = consulta(
-                "select to_jsonb(t) - 'token_hash' as json from mcp_token t where t.token_hash = ? and t.estado > 0 "
+                "select to_jsonb(t)" + OCULTOS + " as json from mcp_token t where t.token_hash = ? and t.estado > 0 "
                         + "and (t.fecha_vencimiento is null or t.fecha_vencimiento > now())",
                 sha256(token));
         if (data.isEmpty()) throw new Exception("token inválido");
@@ -114,7 +153,7 @@ public class McpToken {
 
     // --- helpers ---
 
-    private static void exigirPermiso(String key_usuario, String key_empresa, String permiso) throws Exception {
+    private static JSONObject permisos(String key_usuario, String key_empresa) throws Exception {
         JSONObject resp = SocketCliente.sendSinc("roles_permisos", new JSONObject()
                 .put("version", "1.0")
                 .put("component", "usuarioPage")
@@ -124,7 +163,51 @@ public class McpToken {
                 .put("key_empresa", key_empresa), 20000);
         JSONObject page = resp == null ? null : resp.optJSONObject("data") == null ? null : resp.getJSONObject("data").optJSONObject(PAGE);
         JSONObject permisos = page == null ? null : page.optJSONObject("permisos");
-        if (permisos == null || !permisos.has(permiso)) throw new Exception("Sin permiso " + PAGE + " " + permiso);
+        return permisos == null ? new JSONObject() : permisos;
+    }
+
+    private static void exigir(JSONObject permisos, String permiso) throws Exception {
+        if (!permisos.has(permiso)) throw new Exception("Sin permiso " + PAGE + " " + permiso);
+    }
+
+    private static boolean activoEnEmpresa(String key_usuario, String key_empresa) throws Exception {
+        JSONObject resp = SocketCliente.sendSinc("empresa", new JSONObject()
+                .put("component", "empresa_usuario")
+                .put("type", "getAll")
+                .put("estado", "cargando")
+                .put("key_empresa", key_empresa), 20000);
+        JSONObject data = resp == null ? null : resp.optJSONObject("data");
+        if (data == null) return false;
+        for (String k : data.keySet()) {
+            JSONObject eu = data.optJSONObject(k);
+            if (eu != null && key_usuario.equals(eu.optString("key_usuario")) && eu.optInt("estado", 1) > 0) return true;
+        }
+        return false;
+    }
+
+    // AES-256-GCM: base64(iv(12) || cifrado+tag)
+    private static SecretKeySpec clave() throws Exception {
+        JSONObject mcp = SConfig.getJSON().optJSONObject("mcp");
+        String secret = mcp == null ? "" : mcp.optString("token_secret", "");
+        byte[] k = Base64.getDecoder().decode(secret);
+        if (k.length != 32) throw new Exception("Falta config mcp.token_secret (32 bytes en base64)");
+        return new SecretKeySpec(k, "AES");
+    }
+
+    private static String cifrar(String texto) throws Exception {
+        byte[] iv = new byte[12];
+        RANDOM.nextBytes(iv);
+        Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
+        c.init(Cipher.ENCRYPT_MODE, clave(), new GCMParameterSpec(128, iv));
+        byte[] ct = c.doFinal(texto.getBytes(StandardCharsets.UTF_8));
+        return Base64.getEncoder().encodeToString(ByteBuffer.allocate(iv.length + ct.length).put(iv).put(ct).array());
+    }
+
+    private static String descifrar(String b64) throws Exception {
+        byte[] all = Base64.getDecoder().decode(b64);
+        Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
+        c.init(Cipher.DECRYPT_MODE, clave(), new GCMParameterSpec(128, all, 0, 12));
+        return new String(c.doFinal(all, 12, all.length - 12), StandardCharsets.UTF_8);
     }
 
     private static JSONObject consulta(String sql, String param) throws Exception {
