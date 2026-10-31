@@ -36,6 +36,9 @@ public class ZKTecoAccesos {
             case "testConnection":
                 testConnection(obj);
                 break;
+            case "suscribirIngresos":
+                ZKTecoIngresos.suscribir(obj, session);
+                break;
         }
     }
 

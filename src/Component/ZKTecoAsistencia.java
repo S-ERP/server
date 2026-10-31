@@ -55,6 +55,7 @@ public class ZKTecoAsistencia {
             marcaciones.sort((a, b) -> a.optString("fecha_on").compareTo(b.optString("fecha_on")));
 
             JSONObject accesos = ZKTecoAccesos.getAccesos(key_sucursal);
+            ZKTecoIngresos.avisar(key_sucursal, marcaciones, accesos);
             String key_empresa = accesos.getString("key_empresa");
             Map<String, String> suscripciones = new HashMap<>();
             JSONArray clientes = accesos.getJSONArray("clientes");
