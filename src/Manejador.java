@@ -59,6 +59,7 @@ public class Manejador {
             case HabilidadUsuario.COMPONENT: HabilidadUsuario.onMessage(obj, session); break;
             case ZKTeco.LECTOR_HUELLA: ZKTeco.onMessage(obj, session); break;
             case ZKTecoAccesos.COMPONENT: ZKTecoAccesos.onMessage(obj, session); break;
+            case McpToken.COMPONENT: McpToken.onMessage(obj, session); break;
             case "listener": listener(obj, session); break;
         }
 
