@@ -25,3 +25,9 @@ CREATE INDEX IF NOT EXISTS mcp_token_key_empresa_idx ON public.mcp_token (key_em
 ALTER TABLE public.mcp_token ADD COLUMN IF NOT EXISTS key_usuario_creador character varying;
 ALTER TABLE public.mcp_token ADD COLUMN IF NOT EXISTS token_cifrado character varying;
 UPDATE public.mcp_token SET key_usuario_creador = key_usuario WHERE key_usuario_creador IS NULL;
+
+-- 2026-10-31: conexiones OAuth (claude.ai). Una fila por conexión; el refresh rota access y refresh.
+ALTER TABLE public.mcp_token ADD COLUMN IF NOT EXISTS origen character varying DEFAULT 'manual';
+ALTER TABLE public.mcp_token ADD COLUMN IF NOT EXISTS refresh_hash character varying;
+ALTER TABLE public.mcp_token ADD COLUMN IF NOT EXISTS refresh_vence timestamp without time zone;
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_token_refresh_hash_idx ON public.mcp_token (refresh_hash);

@@ -46,7 +46,7 @@ public class McpToken {
     public static final String PAGE = "/empresa/mcp";
     private static final String PREFIJO = "smcp_";
     private static final SecureRandom RANDOM = new SecureRandom();
-    private static final String OCULTOS = " - 'token_hash' - 'token_cifrado'";
+    private static final String OCULTOS = " - 'token_hash' - 'token_cifrado' - 'refresh_hash'";
 
     public static void onMessage(JSONObject obj, SSSessionAbstract session) {
         try {
@@ -56,6 +56,10 @@ public class McpToken {
                 case "ver": ver(obj); break;
                 case "anular": anular(obj); break;
                 case "validar": validar(obj); break;
+                case "oauth_empresas": oauthEmpresas(obj); break;
+                case "oauth_emitir": oauthEmitir(obj); break;
+                case "oauth_refresh": oauthRefresh(obj); break;
+                case "oauth_revocar": oauthRevocar(obj); break;
                 default: return;
             }
             obj.put("estado", "exito");
@@ -151,6 +155,118 @@ public class McpToken {
         actualizar("update mcp_token set fecha_ultimo_uso = now() where key = ?", data.getString("key"));
         obj.remove("token");
         obj.put("data", data);
+    }
+
+    // --- OAuth (conector de claude.ai) ---
+    // Cada conexión es una fila origen = 'oauth': token_hash = access token vigente (vence en 1 hora, fecha_vencimiento)
+    // y refresh_hash = refresh token (vence a los 30 días sin uso, refresh_vence). El refresh rota los dos.
+    // Emitir exige usuario + contraseña (MD5, como la app) verificados contra el servicio usuario y el permiso
+    // PAGE/conectar del usuario en la empresa.
+
+    static void oauthEmpresas(JSONObject obj) throws Exception {
+        JSONObject usuario = login(obj);
+        String key_usuario = usuario.getString("key");
+        JSONArray empresas = new JSONArray();
+        JSONObject resp = SocketCliente.sendSinc("empresa", new JSONObject()
+                .put("component", "empresa_usuario").put("type", "getAll").put("estado", "cargando")
+                .put("key_usuario", key_usuario), 20000);
+        JSONObject data = resp == null ? null : resp.optJSONObject("data");
+        if (data != null) for (String k : data.keySet()) {
+            JSONObject eu = data.optJSONObject(k);
+            if (eu == null || eu.optInt("estado", 1) <= 0) continue;
+            String key_empresa = eu.optString("key_empresa");
+            if (!permisos(key_usuario, key_empresa).has("conectar")) continue;
+            JSONObject e = eu.optJSONObject("empresa");
+            empresas.put(new JSONObject().put("key_empresa", key_empresa)
+                    .put("razon_social", e == null ? "" : e.optString("razon_social")));
+        }
+        obj.remove("password");
+        obj.put("data", new JSONObject()
+                .put("key_usuario", key_usuario)
+                .put("nombre", (usuario.optString("Nombres") + " " + usuario.optString("Apellidos")).trim())
+                .put("empresas", empresas));
+    }
+
+    static void oauthEmitir(JSONObject obj) throws Exception {
+        JSONObject usuario = login(obj);
+        obj.remove("password");
+        String key_usuario = usuario.getString("key");
+        String key_empresa = uuid(obj, "key_empresa");
+        if (!activoEnEmpresa(key_usuario, key_empresa)) throw new Exception("El usuario no está activo en la empresa");
+        exigir(permisos(key_usuario, key_empresa), "conectar");
+        String alcance = obj.optString("alcance", "lectura");
+        if (!alcance.equals("lectura") && !alcance.equals("escritura")) throw new Exception("alcance inválido");
+
+        String access = nuevoToken(), refresh = nuevoToken();
+        String key = SUtil.uuid();
+        JSONObject row = new JSONObject()
+                .put("key", key)
+                .put("estado", 1)
+                .put("fecha_on", SUtil.now())
+                .put("key_usuario", key_usuario)
+                .put("key_usuario_creador", key_usuario)
+                .put("key_empresa", key_empresa)
+                .put("descripcion", obj.optString("descripcion", "Conector OAuth").trim())
+                .put("alcance", alcance)
+                .put("origen", "oauth")
+                .put("token_hash", sha256(access))
+                .put("refresh_hash", sha256(refresh))
+                .put("token_prefijo", access.substring(0, PREFIJO.length() + 6));
+        SPGConect.insertArray2(COMPONENT, new JSONArray().put(row));
+        actualizar("update mcp_token set fecha_vencimiento = now() + interval '1 hour', refresh_vence = now() + interval '30 days' where key = ?", key);
+        obj.put("data", tokensOauth(key, access, refresh));
+    }
+
+    static void oauthRefresh(JSONObject obj) throws Exception {
+        String refresh = obj.optString("refresh_token", "");
+        obj.remove("refresh_token");
+        if (!refresh.startsWith(PREFIJO)) throw new Exception("refresh_token inválido");
+        JSONObject t = consulta("select to_jsonb(t) as json from mcp_token t where t.refresh_hash = ? and t.estado > 0 "
+                + "and t.refresh_vence > now()", sha256(refresh));
+        if (t.isEmpty()) throw new Exception("refresh_token inválido, vencido o anulado");
+        if (!activoEnEmpresa(t.getString("key_usuario"), t.getString("key_empresa"))
+                || !permisos(t.getString("key_usuario"), t.getString("key_empresa")).has("conectar"))
+            throw new Exception("El usuario ya no puede conectar el MCP en esta empresa");
+        String access = nuevoToken(), nuevoRefresh = nuevoToken();
+        int n = actualizar("update mcp_token set token_hash = ?, refresh_hash = ?, token_prefijo = ?, "
+                + "fecha_vencimiento = now() + interval '1 hour', refresh_vence = now() + interval '30 days' "
+                + "where key = ? and refresh_hash = ? and estado > 0",
+                sha256(access), sha256(nuevoRefresh), access.substring(0, PREFIJO.length() + 6), t.getString("key"), sha256(refresh));
+        if (n == 0) throw new Exception("refresh_token ya usado");
+        obj.put("data", tokensOauth(t.getString("key"), access, nuevoRefresh));
+    }
+
+    static void oauthRevocar(JSONObject obj) throws Exception {
+        String token = obj.optString("token", "");
+        obj.remove("token");
+        if (!token.startsWith(PREFIJO)) return;
+        String h = sha256(token);
+        actualizar("update mcp_token set estado = 0, fecha_anulacion = now() where (token_hash = ? or refresh_hash = ?) and estado > 0", h, h);
+    }
+
+    private static JSONObject tokensOauth(String key, String access, String refresh) {
+        return new JSONObject().put("key", key).put("access_token", access).put("refresh_token", refresh).put("expires_in", 3600);
+    }
+
+    private static String nuevoToken() {
+        byte[] bytes = new byte[32];
+        RANDOM.nextBytes(bytes);
+        return PREFIJO + Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    // Verifica usuario + password (MD5) contra el servicio usuario. Devuelve el usuario.
+    private static JSONObject login(JSONObject obj) throws Exception {
+        String usuario = obj.optString("usuario", "").trim();
+        String password = obj.optString("password", "");
+        obj.remove("password"); // nunca vuelve en la respuesta, ni en error
+        if (usuario.isEmpty() || !password.matches("[0-9a-f]{32}")) throw new Exception("Usuario o contraseña inválidos");
+        JSONObject resp = SocketCliente.sendSinc("usuario", new JSONObject()
+                .put("version", "2.0").put("component", "usuario").put("type", "login").put("estado", "cargando")
+                .put("data", new JSONObject().put("usuario", usuario).put("password", password)), 20000);
+        JSONObject u = resp == null ? null : resp.optJSONObject("data");
+        if (resp == null || !"exito".equals(resp.optString("estado")) || u == null || u.optString("key").isEmpty())
+            throw new Exception("Usuario o contraseña incorrectos");
+        return u;
     }
 
     // --- helpers ---
