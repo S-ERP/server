@@ -2,6 +2,8 @@ package Component;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.sql.Connection;
@@ -37,7 +39,7 @@ import SocketCliente.SocketCliente;
  * Permisos en roles_permisos: PAGE ver (listar y ver los propios), new (crear), delete (anular),
  * otro_usuario (crear y ver tokens de otros usuarios).
  * El token se guarda como SHA-256 (para validar) y cifrado con AES-GCM (para poder mostrarlo); la clave está en
- * config.json -> mcp.token_secret (base64 de 32 bytes).
+ * config.json -> mcp.token_secret o en el archivo mcp_token.secret (base64 de 32 bytes).
  */
 public class McpToken {
     public static final String COMPONENT = "mcp_token";
@@ -185,12 +187,18 @@ public class McpToken {
         return false;
     }
 
+    // Clave de cifrado: config.json -> mcp.token_secret o, si no está, el archivo mcp_token.secret (fuera de git; así
+    // desarrollo usa la misma clave que producción sin subirla al repo). Base64 de 32 bytes.
+    private static final String ARCHIVO_CLAVE = "mcp_token.secret";
+
     // AES-256-GCM: base64(iv(12) || cifrado+tag)
     private static SecretKeySpec clave() throws Exception {
         JSONObject mcp = SConfig.getJSON().optJSONObject("mcp");
         String secret = mcp == null ? "" : mcp.optString("token_secret", "");
+        if (secret.isEmpty() && Files.exists(Paths.get(ARCHIVO_CLAVE)))
+            secret = new String(Files.readAllBytes(Paths.get(ARCHIVO_CLAVE)), StandardCharsets.UTF_8).trim();
         byte[] k = Base64.getDecoder().decode(secret);
-        if (k.length != 32) throw new Exception("Falta config mcp.token_secret (32 bytes en base64)");
+        if (k.length != 32) throw new Exception("Falta la clave de tokens: config mcp.token_secret o " + ARCHIVO_CLAVE + " (32 bytes en base64)");
         return new SecretKeySpec(k, "AES");
     }
 
