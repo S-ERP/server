@@ -31,3 +31,6 @@ ALTER TABLE public.mcp_token ADD COLUMN IF NOT EXISTS origen character varying D
 ALTER TABLE public.mcp_token ADD COLUMN IF NOT EXISTS refresh_hash character varying;
 ALTER TABLE public.mcp_token ADD COLUMN IF NOT EXISTS refresh_vence timestamp without time zone;
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_token_refresh_hash_idx ON public.mcp_token (refresh_hash);
+
+-- 2026-11-05: un token / conexión para varias empresas (JSON array de key_empresa; null = solo key_empresa).
+ALTER TABLE public.mcp_token ADD COLUMN IF NOT EXISTS empresas character varying;

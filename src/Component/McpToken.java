@@ -72,20 +72,23 @@ public class McpToken {
     static void registro(JSONObject obj) throws Exception {
         String key_empresa = uuid(obj, "key_empresa");
         String creador = uuid(obj, "key_usuario");
-        JSONObject permisos = permisos(creador, key_empresa);
-        exigir(permisos, "new");
-
         JSONObject data = obj.optJSONObject("data");
         if (data == null) data = new JSONObject();
+        java.util.List<String> empresas = empresasPedidas(data, "empresas", key_empresa);
         String alcance = data.optString("alcance", "lectura");
         if (!alcance.equals("lectura") && !alcance.equals("escritura")) throw new Exception("alcance inválido");
         String descripcion = data.optString("descripcion", "").trim();
         if (descripcion.isEmpty()) throw new Exception("La descripción es requerida");
 
         String dueno = data.optString("key_usuario_token", "").isEmpty() ? creador : uuid(data, "key_usuario_token");
-        if (!dueno.equals(creador)) {
-            exigir(permisos, "otro_usuario");
-            if (!activoEnEmpresa(dueno, key_empresa)) throw new Exception("El usuario no está activo en la empresa");
+        // Permisos en CADA empresa del token: crear (new) y, si es para otro, otro_usuario y que él esté activo.
+        for (String e : empresas) {
+            JSONObject permisos = permisos(creador, e);
+            exigir(permisos, "new");
+            if (!dueno.equals(creador)) {
+                exigir(permisos, "otro_usuario");
+                if (!activoEnEmpresa(dueno, e)) throw new Exception("El usuario no está activo en una de las empresas");
+            }
         }
 
         byte[] bytes = new byte[32];
@@ -98,12 +101,12 @@ public class McpToken {
                 .put("fecha_on", SUtil.now())
                 .put("key_usuario", dueno)
                 .put("key_usuario_creador", creador)
-                .put("key_empresa", key_empresa)
                 .put("descripcion", descripcion)
                 .put("alcance", alcance)
                 .put("token_hash", sha256(token))
                 .put("token_cifrado", cifrar(token))
                 .put("token_prefijo", token.substring(0, PREFIJO.length() + 6));
+        ponerEmpresas(row, empresas, key_empresa);
         if (!data.optString("fecha_vencimiento", "").isEmpty()) row.put("fecha_vencimiento", data.getString("fecha_vencimiento"));
         SPGConect.insertArray2(COMPONENT, new JSONArray().put(row));
 
@@ -118,8 +121,8 @@ public class McpToken {
         exigir(permisos(uuid(obj, "key_usuario"), key_empresa), "ver");
         obj.put("data", consulta(
                 "select coalesce(json_object_agg(t.key, to_jsonb(t)" + OCULTOS
-                        + " || jsonb_build_object('visible', t.token_cifrado is not null)), '{}') as json from mcp_token t where t.key_empresa = ?",
-                key_empresa));
+                        + " || jsonb_build_object('visible', t.token_cifrado is not null)), '{}') as json from mcp_token t where " + EN_EMPRESA,
+                key_empresa, key_empresa));
     }
 
     static void ver(JSONObject obj) throws Exception {
@@ -128,7 +131,7 @@ public class McpToken {
         JSONObject permisos = permisos(key_usuario, key_empresa);
         exigir(permisos, "ver");
         JSONObject t = consulta("select to_jsonb(t) as json from mcp_token t where t.key = ?", uuid(obj, "key"));
-        if (t.isEmpty() || !key_empresa.equals(t.optString("key_empresa"))) throw new Exception("Token no encontrado");
+        if (t.isEmpty() || !empresasDe(t).contains(key_empresa)) throw new Exception("Token no encontrado");
         boolean propio = key_usuario.equals(t.optString("key_usuario")) || key_usuario.equals(t.optString("key_usuario_creador"));
         if (!propio) exigir(permisos, "otro_usuario");
         if (t.optString("token_cifrado", "").isEmpty()) throw new Exception("Este token se creó antes de poder mostrarse: anúlelo y cree otro");
@@ -140,7 +143,7 @@ public class McpToken {
         String key_usuario = uuid(obj, "key_usuario");
         exigir(permisos(key_usuario, key_empresa), "delete");
         int n = actualizar("update mcp_token set estado = 0, key_usuario_anulacion = ?, fecha_anulacion = now() "
-                + "where key = ? and key_empresa = ? and estado > 0", key_usuario, uuid(obj, "key"), key_empresa);
+                + "where key = ? and estado > 0 and " + EN_EMPRESA.replace("t.", ""), key_usuario, uuid(obj, "key"), key_empresa, key_empresa);
         if (n == 0) throw new Exception("Token no encontrado");
     }
 
@@ -191,9 +194,11 @@ public class McpToken {
         JSONObject usuario = login(obj);
         obj.remove("password");
         String key_usuario = usuario.getString("key");
-        String key_empresa = uuid(obj, "key_empresa");
-        if (!activoEnEmpresa(key_usuario, key_empresa)) throw new Exception("El usuario no está activo en la empresa");
-        exigir(permisos(key_usuario, key_empresa), "conectar");
+        java.util.List<String> empresas = empresasPedidas(obj, "empresas", obj.optString("key_empresa", "").isEmpty() ? null : uuid(obj, "key_empresa"));
+        for (String e : empresas) {
+            if (!activoEnEmpresa(key_usuario, e)) throw new Exception("El usuario no está activo en una de las empresas");
+            exigir(permisos(key_usuario, e), "conectar");
+        }
         String alcance = obj.optString("alcance", "lectura");
         if (!alcance.equals("lectura") && !alcance.equals("escritura")) throw new Exception("alcance inválido");
 
@@ -205,13 +210,13 @@ public class McpToken {
                 .put("fecha_on", SUtil.now())
                 .put("key_usuario", key_usuario)
                 .put("key_usuario_creador", key_usuario)
-                .put("key_empresa", key_empresa)
                 .put("descripcion", obj.optString("descripcion", "Conector OAuth").trim())
                 .put("alcance", alcance)
                 .put("origen", "oauth")
                 .put("token_hash", sha256(access))
                 .put("refresh_hash", sha256(refresh))
                 .put("token_prefijo", access.substring(0, PREFIJO.length() + 6));
+        ponerEmpresas(row, empresas, empresas.get(0));
         SPGConect.insertArray2(COMPONENT, new JSONArray().put(row));
         actualizar("update mcp_token set fecha_vencimiento = now() + interval '1 hour', refresh_vence = now() + interval '30 days' where key = ?", key);
         obj.put("data", tokensOauth(key, access, refresh));
@@ -224,9 +229,14 @@ public class McpToken {
         JSONObject t = consulta("select to_jsonb(t) as json from mcp_token t where t.refresh_hash = ? and t.estado > 0 "
                 + "and t.refresh_vence > now()", sha256(refresh));
         if (t.isEmpty()) throw new Exception("refresh_token inválido, vencido o anulado");
-        if (!activoEnEmpresa(t.getString("key_usuario"), t.getString("key_empresa"))
-                || !permisos(t.getString("key_usuario"), t.getString("key_empresa")).has("conectar"))
-            throw new Exception("El usuario ya no puede conectar el MCP en esta empresa");
+        // Revalida cada empresa: se quedan solo aquellas donde el usuario sigue activo y con PAGE/conectar.
+        java.util.List<String> antes = empresasDe(t), vigentes = new java.util.ArrayList<>();
+        for (String e : antes)
+            if (activoEnEmpresa(t.getString("key_usuario"), e) && permisos(t.getString("key_usuario"), e).has("conectar")) vigentes.add(e);
+        if (vigentes.isEmpty()) throw new Exception("El usuario ya no puede conectar el MCP en ninguna de sus empresas");
+        if (!vigentes.equals(antes)) actualizar("update mcp_token set key_empresa = ?, empresas = ? where key = ?",
+                vigentes.contains(t.getString("key_empresa")) ? t.getString("key_empresa") : vigentes.get(0),
+                vigentes.size() > 1 ? new JSONArray(vigentes).toString() : null, t.getString("key"));
         String access = nuevoToken(), nuevoRefresh = nuevoToken();
         int n = actualizar("update mcp_token set token_hash = ?, refresh_hash = ?, token_prefijo = ?, "
                 + "fecha_vencimiento = now() + interval '1 hour', refresh_vence = now() + interval '30 days' "
@@ -267,6 +277,41 @@ public class McpToken {
         if (resp == null || !"exito".equals(resp.optString("estado")) || u == null || u.optString("key").isEmpty())
             throw new Exception("Usuario o contraseña incorrectos");
         return u;
+    }
+
+    // --- varias empresas por token ---
+    // Un token puede servir para varias empresas: key_empresa es la principal y empresas (JSON array) la lista completa
+    // cuando son más de una. El MCP elige la empresa en cada llamada.
+    private static final String EN_EMPRESA = "(t.key_empresa = ? or jsonb_exists(coalesce(nullif(t.empresas, ''), '[]')::jsonb, ?))";
+
+    static java.util.List<String> empresasDe(JSONObject t) {
+        java.util.List<String> l = new java.util.ArrayList<>();
+        String e = t.optString("empresas", "");
+        if (!e.isEmpty()) {
+            JSONArray a = new JSONArray(e);
+            for (int i = 0; i < a.length(); i++) l.add(a.getString(i));
+        }
+        if (l.isEmpty()) l.add(t.getString("key_empresa"));
+        return l;
+    }
+
+    /** Lista de empresas pedida (array `campo` o key_empresa), sin repetidos y con formato válido. */
+    private static java.util.List<String> empresasPedidas(JSONObject o, String campo, String porDefecto) throws Exception {
+        java.util.LinkedHashSet<String> l = new java.util.LinkedHashSet<>();
+        JSONArray a = o.optJSONArray(campo);
+        if (a != null) for (int i = 0; i < a.length(); i++) {
+            String v = a.optString(i, "");
+            if (!v.matches("[0-9a-fA-F-]{32,36}")) throw new Exception("empresa inválida: " + v);
+            l.add(v);
+        }
+        if (l.isEmpty() && porDefecto != null) l.add(porDefecto);
+        if (l.isEmpty()) throw new Exception("Elija al menos una empresa");
+        return new java.util.ArrayList<>(l);
+    }
+
+    private static void ponerEmpresas(JSONObject row, java.util.List<String> empresas, String principal) {
+        row.put("key_empresa", empresas.contains(principal) ? principal : empresas.get(0));
+        if (empresas.size() > 1) row.put("empresas", new JSONArray(empresas).toString());
     }
 
     // --- helpers ---
@@ -334,10 +379,10 @@ public class McpToken {
         return new String(c.doFinal(all, 12, all.length - 12), StandardCharsets.UTF_8);
     }
 
-    private static JSONObject consulta(String sql, String param) throws Exception {
+    private static JSONObject consulta(String sql, String... params) throws Exception {
         Connection con = SPGConect.pool.getConnection();
         try (PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setString(1, param);
+            for (int i = 0; i < params.length; i++) ps.setString(i + 1, params[i]);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next() && rs.getString("json") != null) return new JSONObject(rs.getString("json"));
                 return new JSONObject();
