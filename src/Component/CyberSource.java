@@ -28,6 +28,9 @@ import SocketCliente.SocketCliente;
  *   config_get      configurar  -> configuración sin el Shared Secret
  *   config_guardar  configurar  {data:{descripcion, merchant_id, ambiente, cybs_key, cybs_secret?, razon_social, rubro, activo}}
  *   config_probar   configurar  -> prueba las credenciales contra Cybersource
+ *   caja_cobrar     (miembro)   {data:{monto, descripcion, cliente?, key_solicitud?}} -> link con url y qr para cobrar una venta
+ *   caja_estado     (miembro)   {key} -> estado del link (solo de la propia empresa)
+ *   caja_anular     (miembro)   {key} -> anula un link no pagado (el cliente no llegó a pagar)
  *
  * Permisos en roles_permisos: PAGE ver, new, delete, configurar.
  */
@@ -62,6 +65,22 @@ public class CyberSource {
                     break;
                 case "link_anular":
                     exigir(permisos, "delete");
+                    resp = llamar(req.put("component", "link_pago").put("type", "anular").put("key", obj.getString("key")));
+                    break;
+                // Cobro de una venta desde caja: cualquier usuario activo de la empresa (el cajero), sin permisos de /cybersource.
+                case "caja_cobrar": {
+                    JSONObject d = obj.getJSONObject("data");
+                    JSONObject data = new JSONObject().put("monto", d.getDouble("monto"))
+                            .put("descripcion", d.optString("descripcion", "Venta").trim().isEmpty() ? "Venta" : d.getString("descripcion").trim())
+                            .put("cliente", d.optJSONObject("cliente") == null ? new JSONObject() : d.getJSONObject("cliente"));
+                    if (!d.optString("key_solicitud").isEmpty()) data.put("key_solicitud", d.getString("key_solicitud"));
+                    resp = llamar(req.put("component", "link_pago").put("type", "registro").put("data", data));
+                    break;
+                }
+                case "caja_estado":
+                    resp = llamar(req.put("component", "link_pago").put("type", "getByKey").put("key", obj.getString("key")));
+                    break;
+                case "caja_anular":
                     resp = llamar(req.put("component", "link_pago").put("type", "anular").put("key", obj.getString("key")));
                     break;
                 case "config_get":
