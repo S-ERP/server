@@ -4,10 +4,28 @@ import org.json.JSONObject;
 import Servisofts.http.Exception.*;
 import Servisofts.http.annotation.*;
 import SocketCliente.SocketCliente;
+import org.jboss.com.sun.net.httpserver.HttpExchange;
 
+/**
+ * Integración externa de ventas (pensada para el sistema de Calistenia). Era pública y sin autenticación: cualquiera
+ * podía registrar ventas o clientes. Ahora todo (menos /status) exige el header X-Api-Key igual a "venta_api_key" del
+ * config.json de serp; sin esa clave configurada, todo se rechaza.
+ */
 @RestController
 @RequestMapping("/venta")
 public class CalisteniaController {
+
+    private static void exigirClave(HttpExchange ex) throws HttpException {
+        String esperada = "";
+        try {
+            esperada = Servisofts.SConfig.getJSON().optString("venta_api_key", "");
+        } catch (Exception e) {
+        }
+        String recibida = ex == null ? null : ex.getRequestHeaders().getFirst("X-Api-Key");
+        if (esperada.length() < 24 || recibida == null || !java.security.MessageDigest.isEqual(
+                esperada.getBytes(java.nio.charset.StandardCharsets.UTF_8), recibida.getBytes(java.nio.charset.StandardCharsets.UTF_8)))
+            throw new HttpException(401, "{\"estado\":\"error\",\"mensaje\":\"No autorizado\"}");
+    }
 
     @GetMapping("/status")
     public String status() {
@@ -44,7 +62,8 @@ public class CalisteniaController {
     }
 
     @PostMapping("/registrar")
-    public String registrar(@RequestBody String body) throws HttpException {
+    public String registrar(@RequestBody String body, HttpExchange ex) throws HttpException {
+        exigirClave(ex);
         try {
             JSONObject data = new JSONObject(body);
             JSONObject obj = new JSONObject();
@@ -71,7 +90,8 @@ public class CalisteniaController {
     }
 
     @PostMapping("/solicitarCaja")
-    public String solicitarCaja(@RequestBody String body) throws HttpException {
+    public String solicitarCaja(@RequestBody String body, HttpExchange ex) throws HttpException {
+        exigirClave(ex);
         try {
 
             // Validar que el body no venga vacío
@@ -128,7 +148,8 @@ public class CalisteniaController {
     }
 
     @PostMapping("/validarAlmacen")
-    public String validarAlmacen(@RequestBody String body) {
+    public String validarAlmacen(@RequestBody String body, HttpExchange ex) throws HttpException {
+        exigirClave(ex);
         JSONObject response = new JSONObject();
 
         try {
@@ -190,7 +211,8 @@ public class CalisteniaController {
     }
 
     @PostMapping("/validarModelo")
-    public String validarModelo(@RequestBody String body) {
+    public String validarModelo(@RequestBody String body, HttpExchange ex) throws HttpException {
+        exigirClave(ex);
         JSONObject response = new JSONObject();
 
         try {
@@ -253,7 +275,8 @@ public class CalisteniaController {
     }
 
     @PostMapping("/registrarCliente")
-    public String registrarCliente(@RequestBody String body) {
+    public String registrarCliente(@RequestBody String body, HttpExchange ex) throws HttpException {
+        exigirClave(ex);
 
         JSONObject response = new JSONObject();
 
@@ -320,7 +343,8 @@ public class CalisteniaController {
     }
 
     @PostMapping("/validarNit")
-    public String validarNit(@RequestBody String body) {
+    public String validarNit(@RequestBody String body, HttpExchange ex) throws HttpException {
+        exigirClave(ex);
 
         JSONObject response = new JSONObject();
         System.out.println();
@@ -385,7 +409,8 @@ public class CalisteniaController {
     }
 
     @PostMapping("/validarTipoPago")
-    public String validarTipoPago(@RequestBody String body) {
+    public String validarTipoPago(@RequestBody String body, HttpExchange ex) throws HttpException {
+        exigirClave(ex);
         JSONObject response = new JSONObject();
 
         try {
