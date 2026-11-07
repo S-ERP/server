@@ -22,14 +22,15 @@ import SocketCliente.SocketCliente;
  * Cada paso deja registro y se puede repetir: si algo falla, el siguiente intento sigue donde quedó (nunca dos ventas).
  *
  * Cada mes (Tasks.TiendaCobrosTask) se cobra la cuota que vence con la tarjeta guardada (cobro automático MIT). Si se
- * aprueba: pago de la cuota en la caja automática + un mes más de suscripción. Si se rechaza: hasta 3 intentos cada
- * 24 h si el rechazo es reintentable (categoryCode distinto de 01), luego la cuota queda en MORA y el contrato MOROSO.
+ * aprueba: pago de la cuota en la caja automática + un mes más de suscripción. Si se rechaza y es reintentable
+ * (categoryCode distinto de 01) se reintenta según la tienda (reintentos 0..3, cada reintento_horas: 24/48/72);
+ * después la cuota queda en MORA y el contrato MOROSO.
  * El personal puede generar un link para que el cliente pague esa cuota (y con eso cambia la tarjeta guardada).
  *
  * Tablas: tienda_contrato, tienda_cobro (sql/tienda_recurrente.sql).
  */
 public class TiendaContrato {
-    static final int MAX_INTENTOS = 3;
+    static final int MAX_REINTENTOS = 3; // Linkser: máximo 3 reintentos de un cobro rechazado
     static final ZoneId BO = ZoneId.of("America/La_Paz");
 
     static LocalDate hoy() {
@@ -233,11 +234,15 @@ public class TiendaContrato {
                         d.getString("key"), String.valueOf(intento), Tienda.recortar(d.optString("mensaje"), 250), key_cobro);
                 return cobro(key_cobro);
             }
-            boolean reintentar = d.optBoolean("reintentable") && intento < MAX_INTENTOS;
+            // Reintentos según la configuración de la tienda (cada 24/48/72 h; máx 3, regla de Linkser).
+            JSONObject tc = Tienda.consulta("select to_json(t) as json from tienda t where t.key = ?", k.getString("key_tienda"));
+            int horas = Math.max(24, Math.min(168, tc.optInt("reintento_horas", 24)));
+            int reintentos = Math.max(0, Math.min(MAX_REINTENTOS, tc.optInt("reintentos", MAX_REINTENTOS)));
+            boolean reintentar = d.optBoolean("reintentable") && intento <= reintentos;
             Tienda.actualizar("update tienda_cobro set state = ?, key_transaccion = ?, intentos = ?::integer, categoria = ?, error = ?, "
-                    + "proximo_intento = case when ? = 'REINTENTO' then now() + interval '24 hours' else null end where key = ?",
+                    + "proximo_intento = case when ? = 'REINTENTO' then now() + (? || ' hours')::interval else null end where key = ?",
                     reintentar ? "REINTENTO" : "MORA", d.optString("key"), String.valueOf(intento), d.optString("categoria", null),
-                    Tienda.recortar("Rechazado: " + d.optString("mensaje", d.optString("status")), 250), reintentar ? "REINTENTO" : "MORA", key_cobro);
+                    Tienda.recortar("Rechazado: " + d.optString("mensaje", d.optString("status")), 250), reintentar ? "REINTENTO" : "MORA", String.valueOf(horas), key_cobro);
             if (!reintentar) Tienda.actualizar("update tienda_contrato set state = 'MOROSO' where key = ? and state = 'ACTIVO'", k.getString("key"));
             return cobro(key_cobro);
         }

@@ -67,3 +67,7 @@ create table if not exists tienda_cobro (
 );
 create unique index if not exists tienda_cobro_numero on tienda_cobro (key_contrato, numero) where estado > 0;
 create index if not exists tienda_cobro_pendientes on tienda_cobro (state, fecha_vencimiento);
+
+-- Reintentos de cobro configurables por empresa (Linkser: máximo 3 reintentos, al menos cada 24 h).
+alter table tienda add column if not exists reintento_horas integer default 24;  -- 24 | 48 | 72
+alter table tienda add column if not exists reintentos integer default 3;        -- 0..3 reintentos después del primer intento

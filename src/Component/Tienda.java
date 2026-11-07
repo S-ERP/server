@@ -46,6 +46,10 @@ public class Tienda {
                     CyberSource.exigirPermiso(permisos, "configurar");
                     obj.put("data", guardarConfig(key_empresa, key_usuario, obj.getJSONObject("data")));
                     break;
+                case "config_opciones":
+                    CyberSource.exigirPermiso(permisos, "configurar");
+                    obj.put("data", opciones(key_empresa, key_usuario));
+                    break;
                 case "ordenes":
                     CyberSource.exigirPermiso(permisos, "ver");
                     obj.put("data", ordenes(key_empresa, obj.optString("desde", ""), obj.optString("hasta", "")));
@@ -423,7 +427,9 @@ public class Tienda {
                     + "key_moneda = ?, origenes = ?::json where key = ?", d.optString("nombre", "Tienda web"), String.valueOf(d.optBoolean("activa", true)),
                     d.getString("key_punto_venta"), d.getString("key_almacen"), d.getString("key_empresa_tipo_pago"), d.getString("key_usuario_venta"),
                     d.getString("key_moneda"), origenes, key);
-        actualizar("update tienda set key_empresa_tipo_pago_credito = nullif(?, '') where key = ?", credito, key);
+        actualizar("update tienda set key_empresa_tipo_pago_credito = nullif(?, ''), reintento_horas = ?::integer, reintentos = ?::integer where key = ?", credito,
+                String.valueOf(java.util.Arrays.asList(24, 48, 72).contains(d.optInt("reintento_horas", 24)) ? d.optInt("reintento_horas", 24) : 24),
+                String.valueOf(Math.max(0, Math.min(3, d.optInt("reintentos", 3)))), key);
         JSONArray productos = d.optJSONArray("productos");
         if (productos != null) {
             actualizar("update tienda_producto set estado = 0 where key_tienda = ?", key);
@@ -445,6 +451,39 @@ public class Tienda {
             }
         }
         return configCompleta(key_empresa);
+    }
+
+    /** Listas para la pantalla de configuración (cada una por separado: si un servicio falla, las demás igual llegan). */
+    static JSONObject opciones(String key_empresa, String key_usuario) {
+        JSONObject out = new JSONObject();
+        out.put("sucursales", sucursales(key_empresa));
+        out.put("puntos_venta", lista("empresa", new JSONObject().put("component", "punto_venta").put("type", "getAll").put("key_empresa", key_empresa), "key", "descripcion", "key_sucursal"));
+        out.put("almacenes", lista("inventario", new JSONObject().put("version", "1.0").put("component", "almacen").put("type", "getAll").put("key_empresa", key_empresa).put("key_usuario", key_usuario), "key", "descripcion", "key_sucursal"));
+        out.put("tipos_pago", lista("caja", new JSONObject().put("component", "empresa_tipo_pago").put("type", "getAll").put("key_empresa", key_empresa), "key", "descripcion", "key_tipo_pago", "key_moneda", "key_pasarela_empresa"));
+        out.put("monedas", lista("empresa", new JSONObject().put("component", "empresa_moneda").put("type", "getAll").put("key_empresa", key_empresa), "key", "descripcion", "codigo", "tipo"));
+        out.put("usuarios", lista("empresa", new JSONObject().put("component", "empresa_usuario").put("type", "getAll").put("key_empresa", key_empresa), "key_usuario", "alias", "key_rol"));
+        out.put("modelos", lista("inventario", new JSONObject().put("version", "1.0").put("component", "modelo").put("type", "getAll").put("key_empresa", key_empresa), "key", "descripcion", "precio_venta", "duracion", "duracion_medida", "venta_caja"));
+        return out;
+    }
+
+    private static JSONArray lista(String servicio, JSONObject req, String... campos) {
+        JSONArray out = new JSONArray();
+        try {
+            JSONObject r = SocketCliente.sendSinc(servicio, req.put("estado", "cargando"), 30000);
+            Object d = r == null ? null : r.opt("data");
+            java.util.List<Object> filas = new java.util.ArrayList<>();
+            if (d instanceof JSONObject) for (String k : ((JSONObject) d).keySet()) filas.add(((JSONObject) d).get(k));
+            if (d instanceof JSONArray) for (int i = 0; i < ((JSONArray) d).length(); i++) filas.add(((JSONArray) d).get(i));
+            for (Object o : filas) {
+                if (!(o instanceof JSONObject) || ((JSONObject) o).optInt("estado", 1) <= 0) continue;
+                JSONObject x = new JSONObject();
+                for (String c : campos) x.put(c, ((JSONObject) o).opt(c));
+                out.put(x);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return out;
     }
 
     static JSONArray ordenes(String key_empresa, String desde, String hasta) throws Exception {
