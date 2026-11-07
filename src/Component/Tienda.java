@@ -57,6 +57,34 @@ public class Tienda {
                     actualizar("update tienda_orden set intentos = 0, state = case when state = 'ERROR' then 'PAGADA' else state end where key = ?", o.getString("key"));
                     obj.put("data", publicaOrden(procesar(o.getString("key"))));
                     break;
+                // ---- Contratos en cuotas (débito automático) ----
+                case "contratos":
+                    CyberSource.exigirPermiso(permisos, "ver");
+                    obj.put("data", TiendaContrato.contratos(key_empresa, obj.optString("state", "")));
+                    break;
+                case "contrato":
+                    CyberSource.exigirPermiso(permisos, "ver");
+                    obj.put("data", TiendaContrato.detalle(obj.getString("key"), key_empresa));
+                    break;
+                case "cobros":
+                    CyberSource.exigirPermiso(permisos, "ver");
+                    obj.put("data", TiendaContrato.cobros(key_empresa, obj.optString("desde", ""), obj.optString("hasta", ""), obj.optString("state", "")));
+                    break;
+                case "cobro_cobrar": {
+                    CyberSource.exigirPermiso(permisos, "configurar");
+                    JSONObject cb = TiendaContrato.cobro(obj.getString("key"));
+                    if (!key_empresa.equals(cb.optString("key_empresa"))) throw new Exception("Cobro no encontrado");
+                    obj.put("data", TiendaContrato.procesar(cb.getString("key"), true));
+                    break;
+                }
+                case "cobro_link":
+                    CyberSource.exigirPermiso(permisos, "configurar");
+                    obj.put("data", TiendaContrato.generarLink(obj.getString("key"), key_empresa));
+                    break;
+                case "contrato_cancelar":
+                    CyberSource.exigirPermiso(permisos, "configurar");
+                    obj.put("data", TiendaContrato.cancelar(obj.getString("key"), key_empresa, key_usuario, obj.optBoolean("anular_restantes"), obj.optString("motivo")));
+                    break;
                 default:
                     throw new Exception("type no soportado: " + obj.getString("type"));
             }
@@ -82,6 +110,8 @@ public class Tienda {
                     .put("nombre", p.optString("nombre").isEmpty() ? m.optString("descripcion") : p.optString("nombre"))
                     .put("descripcion", p.optString("descripcion", ""))
                     .put("precio", m.optDouble("precio_venta", 0))
+                    .put("modalidad", p.optString("modalidad", "unico"))
+                    .put("cuotas", "cuotas".equals(p.optString("modalidad")) ? Math.max(2, p.optInt("cuotas", 12)) : 1)
                     .put("duracion", m.optInt("duracion", 0))
                     .put("duracion_medida", m.optString("duracion_medida", "dias"))
                     .put("sucursales", filtrarSucursales(sucursalesEmpresa, p.optJSONArray("sucursales"))));
@@ -128,6 +158,13 @@ public class Tienda {
 
         // Link de pago (servicio cybersource). key_solicitud = la orden: reintentar crea/devuelve el mismo link.
         JSONObject datosLink = new JSONObject().put("monto", monto).put("descripcion", nombre).put("key_solicitud", "tienda:" + key);
+        // Plan en cuotas (Fidelidad / Total): el primer pago es la cuota 1 y deja la tarjeta guardada para las siguientes.
+        boolean enCuotas = "cuotas".equals(p.optString("modalidad"));
+        if (enCuotas) {
+            if (t.optString("key_empresa_tipo_pago_credito").isEmpty()) throw new Exception("Este plan todavía no está disponible");
+            datosLink.put("guardar_tarjeta", true).put("descripcion", nombre + " · cuota 1/" + Math.max(2, p.optInt("cuotas", 12)) + " (débito automático)");
+            actualizar("update tienda_orden set modalidad = 'cuotas' where key = ?", key);
+        }
         String volver = urlRetorno(b.optString("volver", ""), origen, key);
         if (volver != null) datosLink.put("url_retorno", volver);
         // Página de pago en un iframe de la tienda: el servicio cybersource declara este origen a Cybersource
@@ -191,6 +228,18 @@ public class Tienda {
                 actualizar("update tienda_orden set state = 'PAGADA', fecha_pago = now() where key = ? and state = 'PENDIENTE_PAGO'", key);
                 o = buscarOrden(key);
             }
+            if ("cuotas".equals(o.optString("modalidad"))) {
+                // Contrato en cuotas: TiendaContrato completa los pasos que falten (venta, contrato, cuotas, pago de la 1).
+                try {
+                    String venta = TiendaContrato.registrar(o, link);
+                    actualizar("update tienda_orden set state = 'VENTA', key_compra_venta = ?, fecha_venta = coalesce(fecha_venta, now()), error = null where key = ?", venta, key);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    actualizar("update tienda_orden set intentos = intentos + 1, error = ?, state = case when intentos + 1 >= " + MAX_INTENTOS
+                            + " then 'ERROR' else state end where key = ?", recortar(e.getMessage(), 250), key);
+                }
+                return buscarOrden(key);
+            }
             if (!link.optString("consumido_por", "").isEmpty()) {
                 // Ya hay una venta con este pago (p. ej. se registró y falló justo al guardar la orden).
                 actualizar("update tienda_orden set state = 'VENTA', key_compra_venta = ?, fecha_venta = coalesce(fecha_venta, now()), error = null where key = ?",
@@ -216,12 +265,7 @@ public class Tienda {
         JSONObject c = o.getJSONObject("cliente");
 
         // 1) Cliente: por CI; si no existe se crea.
-        String key_cliente = o.optString("key_cliente", "");
-        if (key_cliente.isEmpty()) {
-            key_cliente = buscarCliente(key_empresa, key_usuario, c.getString("ci"));
-            if (key_cliente == null) key_cliente = crearCliente(key_empresa, key_usuario, c);
-            actualizar("update tienda_orden set key_cliente = ? where key = ?", key_cliente, o.getString("key"));
-        }
+        String key_cliente = clienteDeOrden(o, key_empresa, key_usuario);
 
         // 2) Caja automática del punto de venta de la tienda.
         JSONObject caja = bus("caja", new JSONObject().put("component", "caja").put("type", "getAutomatica")
@@ -273,8 +317,20 @@ public class Tienda {
         return venta;
     }
 
+    /** Cliente de la orden: el ya resuelto, o por CI en el CRM (si no existe se crea). Se guarda en la orden. */
+    static String clienteDeOrden(JSONObject o, String key_empresa, String key_usuario) throws Exception {
+        String key_cliente = o.optString("key_cliente", "");
+        if (!key_cliente.isEmpty()) return key_cliente;
+        JSONObject c = o.getJSONObject("cliente");
+        key_cliente = buscarCliente(key_empresa, key_usuario, c.getString("ci"));
+        if (key_cliente == null) key_cliente = crearCliente(key_empresa, key_usuario, c);
+        actualizar("update tienda_orden set key_cliente = ? where key = ?", key_cliente, o.getString("key"));
+        o.put("key_cliente", key_cliente);
+        return key_cliente;
+    }
+
     /** Cliente de la empresa por CI exacto (crm cliente buscar_ci). null si no existe; si el CRM falla, error (no se crea otro). */
-    private static String buscarCliente(String key_empresa, String key_usuario, String ci) throws Exception {
+    static String buscarCliente(String key_empresa, String key_usuario, String ci) throws Exception {
         JSONObject r = SocketCliente.sendSinc("crm", new JSONObject().put("component", "cliente").put("type", "buscar_ci").put("estado", "cargando")
                 .put("ci", ci).put("key_empresa", key_empresa).put("key_usuario", key_usuario), 20000);
         if (r == null) throw new Exception("El CRM no respondió");
@@ -286,7 +342,7 @@ public class Tienda {
         throw new Exception("CRM: " + r.optString("error", "error buscando el cliente"));
     }
 
-    private static String crearCliente(String key_empresa, String key_usuario, JSONObject c) throws Exception {
+    static String crearCliente(String key_empresa, String key_usuario, JSONObject c) throws Exception {
         JSONObject data = new JSONObject()
                 .put("nombres", c.optString("nombres")).put("apellidos", c.optString("apellidos"))
                 .put("nit", c.optString("ci")).put("razon_social", (c.optString("nombres") + " " + c.optString("apellidos")).trim())
@@ -301,7 +357,7 @@ public class Tienda {
     }
 
     /** Inicio: hoy, o el día siguiente al fin de una suscripción vigente del mismo tipo. Fin: inicio + duración - 1. */
-    private static String[] fechasSuscripcion(String key_empresa, String key_usuario, String key_cliente, JSONObject m) throws Exception {
+    static String[] fechasSuscripcion(String key_empresa, String key_usuario, String key_cliente, JSONObject m) throws Exception {
         LocalDate hoy = LocalDate.now(ZoneId.of("America/La_Paz"));
         LocalDate inicio = hoy;
         try {
@@ -356,6 +412,7 @@ public class Tienda {
         JSONObject t = consulta("select to_json(t) as json from tienda t where t.key_empresa = ? and t.estado > 0", key_empresa);
         String key = t.isEmpty() ? SUtil.uuid() : t.getString("key");
         String origenes = d.optJSONArray("origenes") == null ? "[]" : d.getJSONArray("origenes").toString();
+        String credito = d.optString("key_empresa_tipo_pago_credito", "");
         if (t.isEmpty())
             actualizar("insert into tienda (key, key_usuario, key_empresa, nombre, activa, key_punto_venta, key_almacen, key_empresa_tipo_pago, key_usuario_venta, key_moneda, origenes) "
                     + "values (?, ?, ?, ?, ?::boolean, ?, ?, ?, ?, ?, ?::json)", key, key_usuario, key_empresa, d.optString("nombre", "Tienda web"),
@@ -366,6 +423,7 @@ public class Tienda {
                     + "key_moneda = ?, origenes = ?::json where key = ?", d.optString("nombre", "Tienda web"), String.valueOf(d.optBoolean("activa", true)),
                     d.getString("key_punto_venta"), d.getString("key_almacen"), d.getString("key_empresa_tipo_pago"), d.getString("key_usuario_venta"),
                     d.getString("key_moneda"), origenes, key);
+        actualizar("update tienda set key_empresa_tipo_pago_credito = nullif(?, '') where key = ?", credito, key);
         JSONArray productos = d.optJSONArray("productos");
         if (productos != null) {
             actualizar("update tienda_producto set estado = 0 where key_tienda = ?", key);
@@ -374,13 +432,16 @@ public class Tienda {
                 if (p.optString("key_modelo").isEmpty()) continue;
                 String suc = p.optJSONArray("sucursales") == null ? null : p.getJSONArray("sucursales").toString();
                 String kp = p.optString("key", "");
+                String modalidad = "cuotas".equals(p.optString("modalidad")) ? "cuotas" : "unico";
+                String cuotas = String.valueOf(modalidad.equals("cuotas") ? Math.max(2, Math.min(36, p.optInt("cuotas", 12))) : 1);
+                if (modalidad.equals("cuotas") && credito.isEmpty()) throw new Exception("Para publicar planes en cuotas falta el tipo de pago a crédito");
                 int n = kp.isEmpty() ? 0 : actualizar("update tienda_producto set estado = 1, key_modelo = ?, nombre = ?, descripcion = ?, orden = ?::integer, solo_web = ?::boolean, "
-                        + "sucursales = ?::json where key = ? and key_tienda = ?", p.getString("key_modelo"), p.optString("nombre"), p.optString("descripcion"),
-                        String.valueOf(p.optInt("orden", i)), String.valueOf(p.optBoolean("solo_web", true)), suc, kp, key);
+                        + "sucursales = ?::json, modalidad = ?, cuotas = ?::integer where key = ? and key_tienda = ?", p.getString("key_modelo"), p.optString("nombre"), p.optString("descripcion"),
+                        String.valueOf(p.optInt("orden", i)), String.valueOf(p.optBoolean("solo_web", true)), suc, modalidad, cuotas, kp, key);
                 if (n == 0)
-                    actualizar("insert into tienda_producto (key, key_usuario, key_tienda, key_modelo, nombre, descripcion, orden, solo_web, sucursales) "
-                            + "values (?, ?, ?, ?, ?, ?, ?::integer, ?::boolean, ?::json)", SUtil.uuid(), key_usuario, key, p.getString("key_modelo"), p.optString("nombre"),
-                            p.optString("descripcion"), String.valueOf(p.optInt("orden", i)), String.valueOf(p.optBoolean("solo_web", true)), suc);
+                    actualizar("insert into tienda_producto (key, key_usuario, key_tienda, key_modelo, nombre, descripcion, orden, solo_web, sucursales, modalidad, cuotas) "
+                            + "values (?, ?, ?, ?, ?, ?, ?::integer, ?::boolean, ?::json, ?, ?::integer)", SUtil.uuid(), key_usuario, key, p.getString("key_modelo"), p.optString("nombre"),
+                            p.optString("descripcion"), String.valueOf(p.optInt("orden", i)), String.valueOf(p.optBoolean("solo_web", true)), suc, modalidad, cuotas);
             }
         }
         return configCompleta(key_empresa);
@@ -443,7 +504,7 @@ public class Tienda {
         return out;
     }
 
-    private static JSONObject linkDe(JSONObject o) {
+    static JSONObject linkDe(JSONObject o) {
         try {
             JSONObject r = CyberSource.llamar(new JSONObject().put("component", "link_pago").put("type", "getByKey")
                     .put("key", o.getString("key_link")).put("key_empresa", o.getString("key_empresa")));
@@ -462,7 +523,7 @@ public class Tienda {
                 .put("error", o.optString("state").equals("ERROR") ? "No pudimos registrar tu inscripción automáticamente: te contactamos para completarla." : JSONObject.NULL);
     }
 
-    private static JSONObject tiendaActiva(String key_tienda) throws Exception {
+    static JSONObject tiendaActiva(String key_tienda) throws Exception {
         JSONObject t = consulta("select to_json(t) as json from tienda t where t.key = ? and t.estado > 0 and t.activa", key_tienda == null ? "" : key_tienda);
         if (t.isEmpty()) throw new Exception("Tienda no disponible");
         return t;
@@ -482,19 +543,19 @@ public class Tienda {
         return out;
     }
 
-    private static JSONObject buscarOrden(String key) throws Exception {
+    static JSONObject buscarOrden(String key) throws Exception {
         JSONObject o = consulta("select to_json(o) as json from tienda_orden o where o.key = ?", key == null ? "" : key);
         if (o.isEmpty()) throw new Exception("Orden no encontrada");
         return o;
     }
 
-    private static JSONObject modelo(String key_modelo) {
+    static JSONObject modelo(String key_modelo) {
         JSONObject r = SocketCliente.sendSinc("inventario", new JSONObject().put("version", "1.0").put("component", "modelo").put("type", "getByKey")
                 .put("estado", "cargando").put("key", key_modelo), 20000);
         return r == null || !"exito".equals(r.optString("estado")) ? null : r.optJSONObject("data");
     }
 
-    private static JSONArray sucursales(String key_empresa) {
+    static JSONArray sucursales(String key_empresa) {
         JSONObject r = SocketCliente.sendSinc("empresa", new JSONObject().put("component", "sucursal").put("type", "getAll")
                 .put("estado", "cargando").put("key_empresa", key_empresa), 20000);
         JSONArray out = new JSONArray();
@@ -518,11 +579,11 @@ public class Tienda {
         return out;
     }
 
-    private static JSONObject bus(String servicio, JSONObject req) throws Exception {
+    static JSONObject bus(String servicio, JSONObject req) throws Exception {
         return bus(servicio, req, 20000);
     }
 
-    private static JSONObject bus(String servicio, JSONObject req, int timeout) throws Exception {
+    static JSONObject bus(String servicio, JSONObject req, int timeout) throws Exception {
         JSONObject r = SocketCliente.sendSinc(servicio, req, timeout);
         if (r == null) throw new Exception("Sin respuesta del servicio " + servicio);
         if (!"exito".equals(r.optString("estado"))) throw new Exception(servicio + ": " + r.optString("error", r.optString("mensaje", "error")));
@@ -536,12 +597,12 @@ public class Tienda {
         return v;
     }
 
-    private static String recortar(String s, int max) {
+    static String recortar(String s, int max) {
         if (s == null) return null;
         return s.length() > max ? s.substring(0, max) : s;
     }
 
-    private static JSONObject consulta(String sql, String... params) throws Exception {
+    static JSONObject consulta(String sql, String... params) throws Exception {
         Connection con = SPGConect.pool.getConnection();
         try (PreparedStatement ps = con.prepareStatement(sql)) {
             for (int i = 0; i < params.length; i++) ps.setString(i + 1, params[i]);
@@ -554,7 +615,7 @@ public class Tienda {
         }
     }
 
-    private static int actualizar(String sql, String... params) throws Exception {
+    static int actualizar(String sql, String... params) throws Exception {
         Connection con = SPGConect.pool.getConnection();
         try (PreparedStatement ps = con.prepareStatement(sql)) {
             for (int i = 0; i < params.length; i++) ps.setString(i + 1, params[i]);

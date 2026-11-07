@@ -8,6 +8,7 @@ import Servisofts.http.Rest;
 import Tasks.EmpresaTask;
 import Tasks.TareaTask;
 import Tasks.TiendaTask;
+import Tasks.TiendaCobrosTask;
 import Tasks.ZKTecoTask;
 
 public class App {
@@ -27,6 +28,7 @@ public class App {
             new EmpresaTask();
             new ZKTecoTask();
             new TiendaTask();
+            new TiendaCobrosTask();
             Servisofts.initialize();
 
         } catch (Exception e) {
