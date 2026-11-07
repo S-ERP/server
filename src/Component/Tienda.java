@@ -380,11 +380,21 @@ public class Tienda {
         return out;
     }
 
-    /** Productos marcados "solo web" de la empresa (para que la caja no los venda fuera del punto de venta de la tienda). */
+    /**
+     * Productos con "Vender en caja" desmarcado (inventario modelo.venta_caja = false) y el punto de venta de la
+     * tienda web, el único donde sí se pueden vender. Lo usa el servicio caja para rechazarlos en las demás cajas.
+     */
     public static JSONObject soloWeb(String key_empresa) throws Exception {
-        JSONObject t = consulta("select to_json(t) as json from tienda t where t.key_empresa = ? and t.estado > 0", key_empresa);
+        JSONObject t = consulta("select to_json(t) as json from tienda t where t.key_empresa = ? and t.estado > 0", key_empresa == null ? "" : key_empresa);
+        JSONObject r = SocketCliente.sendSinc("inventario", new JSONObject().put("version", "1.0").put("component", "modelo").put("type", "getAll")
+                .put("estado", "cargando").put("key_empresa", key_empresa), 30000);
+        if (r == null || !"exito".equals(r.optString("estado"))) throw new Exception("No se pudo leer el inventario");
         JSONArray modelos = new JSONArray();
-        if (!t.isEmpty()) for (JSONObject p : productosDe(t.getString("key"))) if (p.optBoolean("solo_web", true)) modelos.put(p.getString("key_modelo"));
+        JSONObject d = r.optJSONObject("data");
+        if (d != null) for (String k : d.keySet()) {
+            JSONObject m = d.optJSONObject(k);
+            if (m != null && m.has("venta_caja") && !m.isNull("venta_caja") && !m.optBoolean("venta_caja", true)) modelos.put(m.optString("key"));
+        }
         return new JSONObject().put("key_punto_venta", t.optString("key_punto_venta", "")).put("modelos", modelos);
     }
 
