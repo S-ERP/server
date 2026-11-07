@@ -456,8 +456,16 @@ public class Tienda {
     /** Listas para la pantalla de configuración (cada una por separado: si un servicio falla, las demás igual llegan). */
     static JSONObject opciones(String key_empresa, String key_usuario) {
         JSONObject out = new JSONObject();
-        out.put("sucursales", sucursales(key_empresa));
-        out.put("puntos_venta", lista("empresa", new JSONObject().put("component", "punto_venta").put("type", "getAll").put("key_empresa", key_empresa), "key", "descripcion", "key_sucursal"));
+        JSONArray sucs = sucursales(key_empresa);
+        out.put("sucursales", sucs);
+        // punto_venta getAll del servicio empresa es por sucursal.
+        JSONArray pvs = new JSONArray();
+        for (int i = 0; i < sucs.length(); i++) {
+            JSONObject s = sucs.getJSONObject(i);
+            JSONArray l = lista("empresa", new JSONObject().put("component", "punto_venta").put("type", "getAll").put("key_sucursal", s.getString("key")), "key", "descripcion", "key_sucursal");
+            for (int j = 0; j < l.length(); j++) pvs.put(l.getJSONObject(j).put("sucursal", s.optString("nombre")));
+        }
+        out.put("puntos_venta", pvs);
         out.put("almacenes", lista("inventario", new JSONObject().put("version", "1.0").put("component", "almacen").put("type", "getAll").put("key_empresa", key_empresa).put("key_usuario", key_usuario), "key", "descripcion", "key_sucursal"));
         out.put("tipos_pago", lista("caja", new JSONObject().put("component", "empresa_tipo_pago").put("type", "getAll").put("key_empresa", key_empresa), "key", "descripcion", "key_tipo_pago", "key_moneda", "key_pasarela_empresa"));
         out.put("monedas", lista("empresa", new JSONObject().put("component", "empresa_moneda").put("type", "getAll").put("key_empresa", key_empresa), "key", "descripcion", "codigo", "tipo"));
