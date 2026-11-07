@@ -269,34 +269,17 @@ public class Tienda {
         return venta;
     }
 
+    /** Cliente de la empresa por CI exacto (crm cliente buscar_ci). null si no existe; si el CRM falla, error (no se crea otro). */
     private static String buscarCliente(String key_empresa, String key_usuario, String ci) throws Exception {
-        JSONObject r = SocketCliente.sendSinc("crm", new JSONObject().put("component", "cliente").put("type", "buscar_nit").put("estado", "cargando")
-                .put("nit", ci).put("key_empresa", key_empresa).put("key_usuario", key_usuario), 20000);
-        if (r == null) throw new Exception("El CRM no respondió"); // sin respuesta no se crea: duplicaría el cliente
-        // Si no lo encuentra responde estado "error" (noexiste): se sigue con el respaldo de abajo.
-        Object d = r == null || !"exito".equals(r.optString("estado")) ? null : r.opt("data");
-        JSONObject cli = null;
-        if (d instanceof JSONObject) {
-            JSONObject dj = (JSONObject) d;
-            if (dj.has("key")) cli = dj;
-            else for (String k : dj.keySet()) if (dj.opt(k) instanceof JSONObject) { cli = dj.getJSONObject(k); break; }
-        } else if (d instanceof JSONArray && ((JSONArray) d).length() > 0) cli = ((JSONArray) d).optJSONObject(0);
-        if (cli != null && !cli.optString("key").isEmpty()) return cli.getString("key");
-        // buscar_nit pasa el NIT por el formateador de teléfonos: un CI de 8 dígitos que empieza en 6/7 se busca como
-        // "+591 7..." y nunca coincide. Respaldo: la lista de clientes de la empresa, comparando el CI tal cual.
-        JSONObject todos = SocketCliente.sendSinc("crm", new JSONObject().put("component", "cliente").put("type", "getAll").put("estado", "cargando")
-                .put("key_empresa", key_empresa).put("key_usuario", key_usuario), 60000);
-        JSONObject lista = todos == null || !"exito".equals(todos.optString("estado")) ? null : todos.optJSONObject("data");
-        if (lista == null) {
-            if (todos != null && "exito".equals(todos.optString("estado"))) return null; // empresa sin clientes
-            throw new Exception("El CRM no devolvió los clientes");
+        JSONObject r = SocketCliente.sendSinc("crm", new JSONObject().put("component", "cliente").put("type", "buscar_ci").put("estado", "cargando")
+                .put("ci", ci).put("key_empresa", key_empresa).put("key_usuario", key_usuario), 20000);
+        if (r == null) throw new Exception("El CRM no respondió");
+        if ("exito".equals(r.optString("estado"))) {
+            JSONObject cli = r.optJSONObject("data");
+            return cli == null || cli.optString("key").isEmpty() ? null : cli.getString("key");
         }
-        String buscado = ci.trim().toUpperCase();
-        for (String k : lista.keySet()) {
-            JSONObject x = lista.optJSONObject(k);
-            if (x != null && x.optInt("estado", 1) > 0 && buscado.equals(x.optString("nit").trim().toUpperCase())) return x.optString("key", k);
-        }
-        return null;
+        if ("noexiste".equals(r.optString("error"))) return null;
+        throw new Exception("CRM: " + r.optString("error", "error buscando el cliente"));
     }
 
     private static String crearCliente(String key_empresa, String key_usuario, JSONObject c) throws Exception {
