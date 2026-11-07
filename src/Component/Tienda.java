@@ -130,6 +130,10 @@ public class Tienda {
         JSONObject datosLink = new JSONObject().put("monto", monto).put("descripcion", nombre).put("key_solicitud", "tienda:" + key);
         String volver = urlRetorno(b.optString("volver", ""), origen, key);
         if (volver != null) datosLink.put("url_retorno", volver);
+        // Página de pago en un iframe de la tienda: el servicio cybersource declara este origen a Cybersource
+        // (Microform). Solo https o localhost; si no, la tienda usa el modo redirección.
+        if (b.optBoolean("iframe") && origen != null && origen.trim().matches("^(https://[A-Za-z0-9.-]+|http://localhost)(:\\d{1,5})?$"))
+            datosLink.put("origen_iframe", origen.trim());
         JSONObject r = CyberSource.llamar(new JSONObject().put("component", "link_pago").put("type", "registro")
                 .put("key_empresa", t.getString("key_empresa")).put("key_usuario", t.optString("key_usuario_venta"))
                 .put("data", datosLink
