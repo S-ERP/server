@@ -272,8 +272,9 @@ public class Tienda {
     private static String buscarCliente(String key_empresa, String key_usuario, String ci) throws Exception {
         JSONObject r = SocketCliente.sendSinc("crm", new JSONObject().put("component", "cliente").put("type", "buscar_nit").put("estado", "cargando")
                 .put("nit", ci).put("key_empresa", key_empresa).put("key_usuario", key_usuario), 20000);
-        if (r == null || !"exito".equals(r.optString("estado"))) return null;
-        Object d = r.opt("data");
+        if (r == null) throw new Exception("El CRM no respondió"); // sin respuesta no se crea: duplicaría el cliente
+        // Si no lo encuentra responde estado "error" (noexiste): se sigue con el respaldo de abajo.
+        Object d = r == null || !"exito".equals(r.optString("estado")) ? null : r.opt("data");
         JSONObject cli = null;
         if (d instanceof JSONObject) {
             JSONObject dj = (JSONObject) d;
@@ -285,8 +286,11 @@ public class Tienda {
         // "+591 7..." y nunca coincide. Respaldo: la lista de clientes de la empresa, comparando el CI tal cual.
         JSONObject todos = SocketCliente.sendSinc("crm", new JSONObject().put("component", "cliente").put("type", "getAll").put("estado", "cargando")
                 .put("key_empresa", key_empresa).put("key_usuario", key_usuario), 60000);
-        JSONObject lista = todos == null ? null : todos.optJSONObject("data");
-        if (lista == null) return null;
+        JSONObject lista = todos == null || !"exito".equals(todos.optString("estado")) ? null : todos.optJSONObject("data");
+        if (lista == null) {
+            if (todos != null && "exito".equals(todos.optString("estado"))) return null; // empresa sin clientes
+            throw new Exception("El CRM no devolvió los clientes");
+        }
         String buscado = ci.trim().toUpperCase();
         for (String k : lista.keySet()) {
             JSONObject x = lista.optJSONObject(k);
