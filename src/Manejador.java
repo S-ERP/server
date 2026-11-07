@@ -61,6 +61,7 @@ public class Manejador {
             case ZKTecoAccesos.COMPONENT: ZKTecoAccesos.onMessage(obj, session); break;
             case McpToken.COMPONENT: McpToken.onMessage(obj, session); break;
             case CyberSource.COMPONENT: CyberSource.onMessage(obj, session); break;
+            case Tienda.COMPONENT: Tienda.onMessage(obj, session); break;
             case "listener": listener(obj, session); break;
         }
 

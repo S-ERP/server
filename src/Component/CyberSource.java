@@ -108,7 +108,7 @@ public class CyberSource {
         }
     }
 
-    private static JSONObject llamar(JSONObject req) throws Exception {
+    static JSONObject llamar(JSONObject req) throws Exception {
         String api = SConfig.getJSON().optString("cybersource_api", "http://192.168.5.56:30056/api");
         HttpURLConnection con = (HttpURLConnection) new URL(api).openConnection();
         con.setRequestMethod("POST");
@@ -129,6 +129,16 @@ public class CyberSource {
         } catch (Exception e) {
             throw new Exception("El servicio de pagos no respondió (HTTP " + http + ")");
         }
+    }
+
+    /** Permisos de la página /cybersource del usuario en la empresa (los usa también Tienda). */
+    static JSONObject permisosDe(String key_usuario, String key_empresa) throws Exception {
+        if (!activoEnEmpresa(key_usuario, key_empresa)) throw new Exception("El usuario no está activo en la empresa");
+        return permisos(key_usuario, key_empresa);
+    }
+
+    static void exigirPermiso(JSONObject permisos, String permiso) throws Exception {
+        exigir(permisos, permiso);
     }
 
     private static JSONObject permisos(String key_usuario, String key_empresa) throws Exception {

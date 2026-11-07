@@ -2,10 +2,12 @@ import Controllers.CalisteniaController;
 import Controllers.BancoGanaderoController;
 import Controllers.CalisteniaController;
 import Controllers.Sapi;
+import Controllers.TiendaController;
 import Servisofts.Servisofts;
 import Servisofts.http.Rest;
 import Tasks.EmpresaTask;
 import Tasks.TareaTask;
+import Tasks.TiendaTask;
 import Tasks.ZKTecoTask;
 
 public class App {
@@ -19,10 +21,12 @@ public class App {
             Rest.addController(BancoGanaderoController.class);
             Rest.addController(Sapi.class);
             Rest.addController(CalisteniaController.class);
+            Rest.addController(TiendaController.class);
 
             new TareaTask();
             new EmpresaTask();
             new ZKTecoTask();
+            new TiendaTask();
             Servisofts.initialize();
 
         } catch (Exception e) {
