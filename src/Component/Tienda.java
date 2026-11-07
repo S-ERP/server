@@ -127,9 +127,12 @@ public class Tienda {
                 String.valueOf(monto), key_sucursal, cliente.toString(), recortar(origen, 60), recortar(ip, 60));
 
         // Link de pago (servicio cybersource). key_solicitud = la orden: reintentar crea/devuelve el mismo link.
+        JSONObject datosLink = new JSONObject().put("monto", monto).put("descripcion", nombre).put("key_solicitud", "tienda:" + key);
+        String volver = urlRetorno(b.optString("volver", ""), origen, key);
+        if (volver != null) datosLink.put("url_retorno", volver);
         JSONObject r = CyberSource.llamar(new JSONObject().put("component", "link_pago").put("type", "registro")
                 .put("key_empresa", t.getString("key_empresa")).put("key_usuario", t.optString("key_usuario_venta"))
-                .put("data", new JSONObject().put("monto", monto).put("descripcion", nombre).put("key_solicitud", "tienda:" + key)
+                .put("data", datosLink
                         .put("cliente", new JSONObject().put("nombre", cliente.getString("nombres")).put("apellido", cliente.getString("apellidos"))
                                 .put("email", cliente.getString("email")).put("telefono", cliente.getString("celular"))
                                 .put("documento", cliente.getString("ci")))));
@@ -140,6 +143,24 @@ public class Tienda {
         JSONObject link = r.getJSONObject("data");
         actualizar("update tienda_orden set key_link = ?, url_pago = ? where key = ?", link.getString("key"), link.getString("url"), key);
         return new JSONObject().put("key", key).put("monto", monto).put("descripcion", nombre).put("url_pago", link.getString("url"));
+    }
+
+    /**
+     * URL a la que la página de pago devuelve al cliente. Solo se acepta si es del mismo sitio que creó la orden
+     * (cabecera Origin del navegador), para que el link no sirva para mandar a otro sitio. "{orden}" se reemplaza
+     * por la key de la orden.
+     */
+    static String urlRetorno(String volver, String origen, String key) {
+        try {
+            if (volver == null || volver.isEmpty() || volver.length() > 400 || origen == null || origen.isEmpty()) return null;
+            java.net.URI u = new java.net.URI(volver.replace("{orden}", "ORDEN"));
+            if (!"http".equals(u.getScheme()) && !"https".equals(u.getScheme())) return null;
+            String o = u.getScheme() + "://" + u.getRawAuthority();
+            if (!o.equalsIgnoreCase(origen.trim())) return null;
+            return volver.replace("{orden}", key);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /** Estado de la orden para la página. Si el pago ya se aprobó y falta la venta, la registra en el acto. */
@@ -259,14 +280,27 @@ public class Tienda {
             if (dj.has("key")) cli = dj;
             else for (String k : dj.keySet()) if (dj.opt(k) instanceof JSONObject) { cli = dj.getJSONObject(k); break; }
         } else if (d instanceof JSONArray && ((JSONArray) d).length() > 0) cli = ((JSONArray) d).optJSONObject(0);
-        return cli == null || cli.optString("key").isEmpty() ? null : cli.getString("key");
+        if (cli != null && !cli.optString("key").isEmpty()) return cli.getString("key");
+        // buscar_nit pasa el NIT por el formateador de teléfonos: un CI de 8 dígitos que empieza en 6/7 se busca como
+        // "+591 7..." y nunca coincide. Respaldo: la lista de clientes de la empresa, comparando el CI tal cual.
+        JSONObject todos = SocketCliente.sendSinc("crm", new JSONObject().put("component", "cliente").put("type", "getAll").put("estado", "cargando")
+                .put("key_empresa", key_empresa).put("key_usuario", key_usuario), 60000);
+        JSONObject lista = todos == null ? null : todos.optJSONObject("data");
+        if (lista == null) return null;
+        String buscado = ci.trim().toUpperCase();
+        for (String k : lista.keySet()) {
+            JSONObject x = lista.optJSONObject(k);
+            if (x != null && x.optInt("estado", 1) > 0 && buscado.equals(x.optString("nit").trim().toUpperCase())) return x.optString("key", k);
+        }
+        return null;
     }
 
     private static String crearCliente(String key_empresa, String key_usuario, JSONObject c) throws Exception {
         JSONObject data = new JSONObject()
                 .put("nombres", c.optString("nombres")).put("apellidos", c.optString("apellidos"))
                 .put("nit", c.optString("ci")).put("razon_social", (c.optString("nombres") + " " + c.optString("apellidos")).trim())
-                .put("telefono", c.optString("celular")).put("correo", c.optString("email"));
+                .put("telefono", c.optString("celular")).put("correo", c.optString("email"))
+                .put("key_empresa", key_empresa); // crm registro toma la empresa de data, no del mensaje
         if (!c.optString("nacimiento").isEmpty()) data.put("fecha_nacimiento", c.optString("nacimiento"));
         JSONObject r = bus("crm", new JSONObject().put("component", "cliente").put("type", "registro")
                 .put("data", data).put("key_empresa", key_empresa).put("key_usuario", key_usuario));
