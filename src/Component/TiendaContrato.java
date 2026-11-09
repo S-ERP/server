@@ -368,9 +368,9 @@ public class TiendaContrato {
      * Anula una compra de la tienda web y devuelve el dinero a la tarjeta (sirve para pruebas y para devoluciones):
      *  - orden sin pagar: anula el link y la orden.
      *  - pago único: anula la venta (la caja devuelve el pago con tarjeta).
-     *  - contrato en cuotas: cancela el contrato (cuotas restantes anuladas), anula el pago de cada cuota cobrada
-     *    de la última a la primera (caja devuelve cada cobro y revierte el movimiento), anula las suscripciones de
-     *    los meses cobrados aparte y por último la venta a crédito.
+     *  - contrato en cuotas: cancela el contrato (cuotas restantes anuladas), anula las suscripciones de los meses
+     *    cobrados aparte y anula la venta a crédito: caja devuelve cada cobro con tarjeta de la venta y revierte sus
+     *    movimientos (los pagos de cuotas quedan ligados a la venta desde caja 2026-11-09).
      * Cada paso se salta si ya está hecho: si algo falla a mitad, repetir sigue donde quedó.
      */
     static JSONObject anularOrden(String key_orden, String key_empresa, String key_usuario, String motivo) throws Exception {
@@ -401,35 +401,32 @@ public class TiendaContrato {
                 if (k.optString("state").equals("ACTIVO") || k.optString("state").equals("MOROSO"))
                     cancelar(k.getString("key"), key_empresa, key_usuario, true, "Compra anulada: " + motivo.trim());
                 else Tienda.actualizar("update tienda_cobro set state = 'ANULADO', proximo_intento = null where key_contrato = ? and state in ('PENDIENTE','REINTENTO','MORA')", k.getString("key"));
+                // Suscripciones de los meses cobrados aparte (la del mes 1 la anula la venta).
                 JSONArray cobros = cobrosDe(k.getString("key"));
-                for (int i = cobros.length() - 1; i >= 0; i--) {
+                for (int i = 0; i < cobros.length(); i++) {
                     JSONObject cb = cobros.getJSONObject(i);
-                    if (!cb.optString("state").equals("PAGADO")) continue;
-                    if (cb.optString("key_caja_detalle", "").isEmpty()) throw new Exception("No se encontró el movimiento de caja de la cuota " + cb.getInt("numero"));
-                    // 1) Pago de la cuota: caja devuelve el cobro a la tarjeta y revierte el movimiento.
-                    Tienda.bus("caja", new JSONObject().put("component", "caja_detalle").put("type", "anularAmortizacion").put("estado", "cargando")
-                            .put("key_empresa", key_empresa).put("key_usuario", key_usuario)
-                            .put("data", new JSONObject().put("key_caja_detalle", cb.getString("key_caja_detalle"))), 60000);
-                    // 2) Suscripción del mes de esa cuota (la del mes 1 la anula la venta).
-                    if (cb.getInt("numero") > 1 && !cb.optString("key_suscripcion", "").isEmpty()) {
-                        try {
-                            Tienda.bus("inventario", new JSONObject().put("version", "1.0").put("component", "suscripcion").put("type", "editar").put("estado", "cargando")
-                                    .put("key_usuario", key_usuario).put("key_empresa", key_empresa)
-                                    .put("data", new JSONObject().put("key", cb.getString("key_suscripcion")).put("estado", 0)));
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
+                    if (!cb.optString("state").equals("PAGADO") || cb.getInt("numero") <= 1 || cb.optString("key_suscripcion", "").isEmpty()) continue;
+                    try {
+                        Tienda.bus("inventario", new JSONObject().put("version", "1.0").put("component", "suscripcion").put("type", "editar").put("estado", "cargando")
+                                .put("key_usuario", key_usuario).put("key_empresa", key_empresa)
+                                .put("data", new JSONObject().put("key", cb.getString("key_suscripcion")).put("estado", 0)));
+                    } catch (Exception e) {
+                        e.printStackTrace();
                     }
-                    Tienda.actualizar("update tienda_cobro set state = 'ANULADO', error = ? where key = ?", Tienda.recortar("Devuelto: " + motivo.trim(), 250), cb.getString("key"));
                 }
             }
-            // 3) La venta (en pago único la caja devuelve el pago con tarjeta en este paso).
+            // La venta: caja devuelve TODOS los cobros con tarjeta ligados a ella (pago único, o la cuota 1 y las cuotas
+            // cobradas, que quedan ligadas a la venta) y revierte sus movimientos; compra_venta anula cuotas, pagos de
+            // cuotas y asientos. (anularAmortizacion no sirve: solo deja anular el último pago del cliente, de cualquier venta.)
             JSONObject r = SocketCliente.sendSinc("caja", new JSONObject().put("component", "caja_detalle").put("type", "anularVenta").put("estado", "cargando")
                     .put("key_empresa", key_empresa).put("key_usuario", key_usuario).put("key_compra_venta", venta)
                     .put("datos_anulacion", new JSONObject().put("motivo", motivo.trim()).put("origen", "Tienda web")), 90000);
             if (r == null) throw new Exception("Sin respuesta del servicio caja al anular la venta");
             if ("error".equals(r.optString("estado")) && !String.valueOf(r.optString("error")).toLowerCase().contains("anulad"))
                 throw new Exception("caja: " + r.optString("error", "no se pudo anular la venta"));
+            if (!o.optString("key_contrato", "").isEmpty())
+                Tienda.actualizar("update tienda_cobro set state = 'ANULADO', error = ? where key_contrato = ? and state = 'PAGADO'",
+                        Tienda.recortar("Devuelto: " + motivo.trim(), 250), o.getString("key_contrato"));
             marcarAnulada(key_orden, key_usuario, motivo);
             return Tienda.consulta("select to_json(o) as json from tienda_orden o where o.key = ?", key_orden);
         }
