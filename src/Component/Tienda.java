@@ -85,6 +85,10 @@ public class Tienda {
                     CyberSource.exigirPermiso(permisos, "configurar");
                     obj.put("data", TiendaContrato.generarLink(obj.getString("key"), key_empresa));
                     break;
+                case "orden_anular":
+                    CyberSource.exigirPermiso(permisos, "configurar");
+                    obj.put("data", TiendaContrato.anularOrden(obj.getString("key"), key_empresa, key_usuario, obj.optString("motivo")));
+                    break;
                 case "contrato_cancelar":
                     CyberSource.exigirPermiso(permisos, "configurar");
                     obj.put("data", TiendaContrato.cancelar(obj.getString("key"), key_empresa, key_usuario, obj.optBoolean("anular_restantes"), obj.optString("motivo")));
@@ -349,6 +353,7 @@ public class Tienda {
     static String crearCliente(String key_empresa, String key_usuario, JSONObject c) throws Exception {
         JSONObject data = new JSONObject()
                 .put("nombres", c.optString("nombres")).put("apellidos", c.optString("apellidos"))
+                .put("ci", c.optString("ci"))
                 .put("nit", c.optString("ci")).put("razon_social", (c.optString("nombres") + " " + c.optString("apellidos")).trim())
                 .put("telefono", c.optString("celular")).put("correo", c.optString("email"))
                 .put("key_empresa", key_empresa); // crm registro toma la empresa de data, no del mensaje

@@ -71,3 +71,10 @@ create index if not exists tienda_cobro_pendientes on tienda_cobro (state, fecha
 -- Reintentos de cobro configurables por empresa (Linkser: máximo 3 reintentos, al menos cada 24 h).
 alter table tienda add column if not exists reintento_horas integer default 24;  -- 24 | 48 | 72
 alter table tienda add column if not exists reintentos integer default 3;        -- 0..3 reintentos después del primer intento
+
+-- Movimiento de caja del pago de cada cuota (para anularlo y devolver el dinero a la tarjeta).
+alter table tienda_cobro add column if not exists key_caja_detalle varchar;
+-- Anulación de compras (Órdenes web → "Anular compra"): quién y por qué.
+alter table tienda_orden add column if not exists fecha_anulacion timestamp;
+alter table tienda_orden add column if not exists motivo_anulacion varchar;
+alter table tienda_orden add column if not exists key_usuario_anulacion varchar;
