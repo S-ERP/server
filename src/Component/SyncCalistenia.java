@@ -364,7 +364,8 @@ public class SyncCalistenia {
                 if (pv.optBoolean("reciente")) throw new Exception("Esperando que Calistenia termine de guardar los pagos");
                 throw new Revisar("Los pagos (" + round(total) + ") no suman el monto de la venta (" + monto + ")");
             }
-            String key_modelo = modeloDePaquete(cfg, pv.getString("key_paquete"));
+            if (monto <= 0) throw new Revisar("Venta de Bs 0 (beca o cortesía): no hay dinero que registrar como venta");
+            String key_modelo = modeloDePaquete(cfg, pv.getString("key_paquete"), fechaContable != null);
             JSONObject m = Tienda.modelo(key_modelo);
             if (m == null) throw new Exception("No se pudo leer el plan " + key_modelo);
 
@@ -955,6 +956,30 @@ public class SyncCalistenia {
         }
     }
 
+    /** Plan de S-ERP para un paquete de Calistenia que ya no se vende (carga histórica): se crea dado de baja, como allá. */
+    static String parHistorico(JSONObject cfg, String key_paquete) throws Exception {
+        String key_empresa = cfg.getString("key_empresa");
+        synchronized (("sync_cal_par:" + key_empresa + key_paquete).intern()) {
+            String km = consultaTexto("select key_modelo as json from sync_cal_paquete where key_empresa = ? and key_paquete_cal = ? and estado > 0", key_empresa, key_paquete);
+            if (!km.isEmpty()) return km;
+            JSONObject p;
+            try (Connection cal = conCal(cfg)) {
+                p = uno(cal, "select key, trim(descripcion) as descripcion, precio, dias, participantes, estado, coalesce(estado_caja, false) as estado_caja from paquete "
+                        + "where key = ? and coalesce(is_molinete, false) and dias > 0", key_paquete);
+            }
+            if (p == null) throw new Revisar("El paquete de Calistenia no es un plan sincronizable (sin molinete o sin días)");
+            km = UUID.randomUUID().toString().replace("-", "");
+            try (Connection inv = conServicio("inventario")) {
+                ejecutar(inv, "insert into modelo (key, key_usuario, fecha_on, estado, descripcion, key_marca, key_tipo_producto, precio_compra, precio_venta, duracion, duracion_medida, "
+                        + "cantidad_suscriptores, precio_venta_moneda, precio_compra_moneda, venta_caja) values (?, ?, now(), ?, ?, ?, ?, 0, ?, ?, 'dias', ?, ?, ?, ?)", km,
+                        cfg.optString("key_usuario_serp"), p.optInt("estado", 1) > 0 ? 1 : 0, p.getString("descripcion"), cfg.optString("key_marca", null), cfg.getString("key_tipo_producto"),
+                        p.getDouble("precio"), p.getInt("dias"), Math.max(1, p.optInt("participantes", 1)), cfg.optString("key_moneda"), cfg.optString("key_moneda"), p.optBoolean("estado_caja"));
+            }
+            guardarPar(key_empresa, key_paquete, km, ORIGEN_CAL);
+            return km;
+        }
+    }
+
     static int diasDe(JSONObject m) {
         int d = m.optInt("duracion", 0);
         String med = m.optString("duracion_medida", "");
@@ -971,8 +996,14 @@ public class SyncCalistenia {
     }
 
     static String modeloDePaquete(JSONObject cfg, String key_paquete) throws Exception {
+        return modeloDePaquete(cfg, key_paquete, false);
+    }
+
+    /** historico: los paquetes dados de baja (promos viejas) también se enlazan, creando el plan dado de baja en S-ERP. */
+    static String modeloDePaquete(JSONObject cfg, String key_paquete, boolean historico) throws Exception {
         String km = consultaTexto("select key_modelo as json from sync_cal_paquete where key_empresa = ? and key_paquete_cal = ? and estado > 0", cfg.getString("key_empresa"), key_paquete);
         if (!km.isEmpty()) return km;
+        if (historico) return parHistorico(cfg, key_paquete);
         catalogo(cfg);
         km = consultaTexto("select key_modelo as json from sync_cal_paquete where key_empresa = ? and key_paquete_cal = ? and estado > 0", cfg.getString("key_empresa"), key_paquete);
         if (km.isEmpty()) throw new Revisar("El paquete de Calistenia no es un plan sincronizable (sin molinete o sin días)");
@@ -1295,7 +1326,26 @@ public class SyncCalistenia {
             }
             int ok = 0, errores = 0;
             String ultimoError = null;
+            // Planes dados de baja (promos viejas): se enlazan y se activan solo mientras dura la carga, sin venta en caja.
+            Map<String, JSONObject> reactivados = new HashMap<>();
             try {
+                java.util.Set<String> paquetes = new java.util.LinkedHashSet<>();
+                for (JSONObject v : ventas) paquetes.add(v.getString("key_paquete"));
+                try (Connection inv = conServicio("inventario")) {
+                    for (String kp : paquetes) {
+                        String km;
+                        try {
+                            km = modeloDePaquete(cfg, kp, true);
+                        } catch (Exception e) {
+                            continue; // la venta queda en REVISAR con el motivo
+                        }
+                        JSONObject m = uno(inv, "select key, estado, coalesce(venta_caja, true) as venta_caja from modelo where key = ?", km);
+                        if (m != null && m.optInt("estado", 1) <= 0) {
+                            reactivados.put(km, m);
+                            ejecutar(inv, "update modelo set estado = 1, venta_caja = false where key = ?", km);
+                        }
+                    }
+                }
                 for (JSONObject v : ventas) {
                     evento(key_empresa, ORIGEN_CAL, "venta", v.getString("key"), new JSONObject().put("historico", mes), 0, false);
                     JSONObject ev = consulta("select to_json(e) as json from sync_cal_evento e where e.key_empresa = ? and e.origen = 'calistenia' and e.tipo = 'venta' and e.key_origen = ? and e.estado > 0",
@@ -1316,6 +1366,12 @@ public class SyncCalistenia {
                     }
                 }
             } finally {
+                try (Connection inv = conServicio("inventario")) {
+                    for (JSONObject m : reactivados.values())
+                        ejecutar(inv, "update modelo set estado = ?, venta_caja = ? where key = ?", m.optInt("estado", 0), m.optBoolean("venta_caja"), m.getString("key"));
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
                 // Volver a abrir la gestión que estaba abierta, pase lo que pase.
                 try (Connection conta = conServicio("contabilidad")) {
                     ejecutar(conta, "update gestion set estado = 1 where key_empresa = ? and estado = 2", key_empresa);
@@ -1336,7 +1392,7 @@ public class SyncCalistenia {
         List<JSONObject> out = new ArrayList<>();
         if (sucs.length == 0) return out;
         try (Connection cal = conCal(cfg)) {
-            for (JSONObject v : q(cal, "select distinct on (pv.key) pv.key, pv.monto, pv.fecha_on::text as fecha_on, c.key_sucursal, trim(s.descripcion) as sucursal "
+            for (JSONObject v : q(cal, "select distinct on (pv.key) pv.key, pv.key_paquete, pv.monto, pv.fecha_on::text as fecha_on, c.key_sucursal, trim(s.descripcion) as sucursal "
                     + "from paquete_venta pv join paquete_venta_usuario u on u.key_paquete_venta = pv.key and u.estado > 0 join caja c on c.key = u.key_caja "
                     + "join sucursal s on s.key = c.key_sucursal where pv.estado > 0 and coalesce(pv.is_server_serp, false) = false and coalesce(c.tipo, '') <> 'serp' "
                     + "and to_char(pv.fecha_on, 'YYYY-MM') = ? and c.key_sucursal = any(?) order by pv.key, u.fecha_on", mes, cal.createArrayOf("varchar", sucs))) {
