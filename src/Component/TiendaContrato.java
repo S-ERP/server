@@ -212,10 +212,15 @@ public class TiendaContrato {
             if (k.optString("key_tarjeta", "").isEmpty()) throw new Exception("El contrato no tiene tarjeta guardada");
 
             int intento = cb.optInt("intentos", 0) + 1;
-            JSONObject r = CyberSource.llamar(new JSONObject().put("component", "link_pago").put("type", "cobrar_token")
+            JSONObject pedido = new JSONObject().put("component", "link_pago").put("type", "cobrar_token")
                     .put("key_empresa", k.getString("key_empresa")).put("key_tarjeta", k.getString("key_tarjeta"))
                     .put("monto", cb.getDouble("monto")).put("key_solicitud", "cobro:" + key_cobro + ":" + intento)
-                    .put("descripcion", k.optString("descripcion") + " · cuota " + cb.getInt("numero") + "/" + k.getInt("cuotas")));
+                    .put("descripcion", k.optString("descripcion") + " · cuota " + cb.getInt("numero") + "/" + k.getInt("cuotas"));
+            // Pruebas: "[simular:DECLINED:02]" en la observación del contrato pide un rechazo simulado (cybersource solo lo
+            // acepta en ambiente de pruebas).
+            java.util.regex.Matcher sm = java.util.regex.Pattern.compile("\\[simular:(\\w+):?(\\w*)\\]").matcher(k.optString("observacion", ""));
+            if (sm.find()) pedido.put("simular", new JSONObject().put("status", sm.group(1)).put("categoria", sm.group(2)));
+            JSONObject r = CyberSource.llamar(pedido);
             if (!"exito".equals(r.optString("estado"))) {
                 // El servicio no llegó a cobrar (error antes de llamar a Cybersource): se reintenta en una hora sin contar intento.
                 Tienda.actualizar("update tienda_cobro set error = ?, proximo_intento = now() + interval '1 hour' where key = ?",
