@@ -14,7 +14,7 @@ Estado al 2026-11-07: los casos marcados ✅ ya se probaron de punta a punta; el
 | Vencimiento / CVV | 01/2029 · 123 |
 | Planes RUDDY | Mensual (pago único) · Fidelidad Web Bs 199 × 12 · Total Web Bs 239 × 12 |
 | Página | http://localhost:8080/web-paquetes/ (iframe) · http://192.168.3.4:8080/web-paquetes/ (redirección) |
-| Rechazos | Linkser no dio tarjetas de rechazo para MIT: simular con monto inválido, token anulado en TMS o un mock del servicio (ver T-COB-04) |
+| Rechazos | El sandbox de Linkser aprueba cualquier monto. En RUDDY (sandbox) poner en la observación del contrato `[simular:DECLINED:02]` (reintentable) o `[simular:DECLINED:01]` (no reintentar); producción lo ignora. Tarjeta inválida real: token inexistente → INVALID_DATA → mora directa (sin reintentos). |
 
 Para adelantar una cuota sin esperar un mes: `update tienda_cobro set fecha_vencimiento = current_date where …` (solo en RUDDY).
 
@@ -31,7 +31,7 @@ Para adelantar una cuota sin esperar un mes: `update tienda_cobro set fecha_venc
 | T-WEB-07 | Tarjeta rechazada en el primer pago | Mensaje, reintento con otra tarjeta, no se crea venta | |
 | T-WEB-08 | El cliente cierra la página tras pagar | La tarea registra la venta en < 1 min | |
 | T-WEB-09 | Recarga en el paso 3 / volver atrás | Retoma la misma orden, no cobra dos veces | |
-| T-WEB-10 | Celular (iOS Safari, Android Chrome), modo claro y oscuro | Iframe legible, alto correcto, desafío visible | |
+| T-WEB-10 | Celular (iOS Safari, Android Chrome), modo claro y oscuro | Iframe legible, alto correcto, desafío visible | ✅ emulado iPhone (falta equipo real) |
 | T-WEB-11 | Plan "Próximamente" o sucursal sin el plan | No se puede comprar | |
 | T-WEB-12 | Límite de órdenes por IP (15 / 10 min) | Mensaje "Demasiados intentos" | |
 
@@ -53,9 +53,9 @@ Para adelantar una cuota sin esperar un mes: `update tienda_cobro set fecha_venc
 | T-COB-01 | Cuota vencida, tarea 8:00–20:00 | Cobra con token, amortiza en caja, +1 mes suscripción | ✅ |
 | T-COB-02 | "Cobrar ahora" desde el panel | Igual que T-COB-01 | ✅ |
 | T-COB-03 | Cobrado pero falla el registro en caja | Queda COBRADO, la siguiente pasada registra sin cobrar | ✅ |
-| T-COB-04 | Rechazo reintentable | REINTENTO, próximo intento según tienda (24/48/72 h) | |
-| T-COB-05 | Rechazo con categoryCode 01 | MORA directo, contrato MOROSO, sin reintentos | |
-| T-COB-06 | Agota reintentos (0, 1, 3 configurados) | MORA tras 1+N intentos | |
+| T-COB-04 | Rechazo reintentable | REINTENTO, próximo intento según tienda (24/48/72 h) | ✅ simulado |
+| T-COB-05 | Rechazo con categoryCode 01 | MORA directo, contrato MOROSO, sin reintentos | ✅ simulado |
+| T-COB-06 | Agota reintentos (0, 1, 3 configurados) | MORA tras 1+N intentos | ✅ con 3 |
 | T-COB-07 | Cuota con una anterior en mora | No se cobra hasta resolver la anterior | |
 | T-COB-08 | Fuera de horario (antes de las 8:00) | No cobra; sí registra COBRADO pendientes | |
 | T-COB-09 | Sin respuesta de Cybersource | INCIERTO, no se reintenta solo, aviso en panel | |
@@ -63,13 +63,15 @@ Para adelantar una cuota sin esperar un mes: `update tienda_cobro set fecha_venc
 | T-COB-11 | Mismo key_solicitud repetido | cybersource devuelve el resultado anterior, no cobra | |
 | T-COB-12 | Última cuota pagada | Contrato FINALIZADO | |
 | T-COB-13 | Día 31 / 29-30 feb | Vence el último día del mes, sin correrse | |
+| T-COB-14 | Tarjeta guardada inválida (token inexistente) | INVALID_DATA → MORA directa, sin reintentos | ✅ real |
+| T-COB-15 | Aviso si la tarea de cobro se atrasa (>25 min) | Aviso rojo en Contratos y Cobros | ✅ |
 
 ## 4. Link de pago de cuota y cambio de tarjeta
 
 | ID | Caso | Esperado | Estado |
 |---|---|---|---|
-| T-LNK-01 | Generar link de cuota en mora | Link con mensaje para WhatsApp | |
-| T-LNK-02 | Cliente paga el link con otra tarjeta | Cuota PAGADA, contrato usa la tarjeta nueva en adelante | |
+| T-LNK-01 | Generar link de cuota en mora | Link con mensaje para WhatsApp | ✅ |
+| T-LNK-02 | Cliente paga el link con otra tarjeta | Cuota PAGADA, contrato usa la tarjeta nueva en adelante | ✅ |
 | T-LNK-03 | Link enviado y la tarea no cobra la tarjeta | Sin doble cobro | |
 | T-LNK-04 | Cuota pagada por token con link pendiente | El link se anula | |
 | T-LNK-05 | Contrato MOROSO que se pone al día | Vuelve a ACTIVO | |
@@ -81,7 +83,7 @@ Para adelantar una cuota sin esperar un mes: `update tienda_cobro set fecha_venc
 | T-CAN-01 | Cancelar anulando restantes | CANCELADO, cobros ANULADO, no cobra más | |
 | T-CAN-02 | Cancelar manteniendo restantes | CANCELADO, cuotas cobrables solo por link | |
 | T-CAN-03 | Anular la amortización de una cuota con tarjeta | Devuelve el pago (void/refund) y revierte en caja | |
-| T-CAN-04 | Anular la venta del contrato | Devuelve todos los pagos con tarjeta de la venta | |
+| T-CAN-04 | Anular la venta del contrato | Devuelve todos los pagos con tarjeta de la venta | ✅ botón Anular compra |
 | T-CAN-05 | Venta en caja con tarjeta y anulación | Void/refund, caja revertida | ✅ |
 | T-CAN-06 | Ajuste contable de cuotas anuladas al cancelar | Definir con contabilidad (hoy la deuda queda en compra_venta) | |
 
