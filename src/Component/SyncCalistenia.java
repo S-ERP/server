@@ -114,6 +114,14 @@ public class SyncCalistenia {
                     exigir(permisos, "ver");
                     obj.put("data", conciliacion(config(key_empresa), obj.optString("fecha", LocalDate.now(BO).toString())));
                     break;
+                case "historico_revisar":
+                    exigir(permisos, "ver");
+                    obj.put("data", historicoRevisar(config(key_empresa), obj.getString("mes")));
+                    break;
+                case "historico_cargar":
+                    exigir(permisos, "configurar");
+                    obj.put("data", historicoCargar(config(key_empresa), obj.getString("mes"), key_usuario));
+                    break;
                 case "pasada":
                     exigir(permisos, "configurar");
                     obj.put("data", pasada(config(key_empresa), true));
@@ -310,6 +318,11 @@ public class SyncCalistenia {
 
     /** Venta de Calistenia -> venta completa en S-ERP. Devuelve la key de compra_venta. */
     static String ventaCal(JSONObject cfg, JSONObject ev) throws Exception {
+        return ventaCal(cfg, ev, null);
+    }
+
+    /** fechaContable != null: carga histórica (sin el límite de activación; venta y comprobante con esa fecha). */
+    static String ventaCal(JSONObject cfg, JSONObject ev, String fechaContable) throws Exception {
         String key_empresa = cfg.getString("key_empresa");
         try (Connection cal = conCal(cfg)) {
             JSONObject pv = uno(cal, "select key, key_paquete, monto, estado, nit, razon_social, coalesce(is_server_serp, false) as is_server_serp, "
@@ -328,8 +341,8 @@ public class SyncCalistenia {
             if ("serp".equals(caja.getString("tipo"))) throw new Omitir("Venta de la caja S-ERP (vino de S-ERP)");
             JSONObject suc = sucursalCal(key_empresa, caja.getString("key_sucursal"));
             if (suc == null || !suc.optBoolean("activo")) throw new Omitir("Sucursal no activa en el sync");
-            if (!suc.optString("fecha_desde").isEmpty() && fechaTexto(pv.getString("fecha_on")).compareTo(fechaTexto(suc.getString("fecha_desde"))) < 0)
-                throw new Omitir("Venta anterior a la activación de la sucursal");
+            if (fechaContable == null && !suc.optString("fecha_desde").isEmpty() && fechaTexto(pv.getString("fecha_on")).compareTo(fechaTexto(suc.getString("fecha_desde"))) < 0)
+                throw new Omitir("Venta anterior a la activación de la sucursal (se pasa con la carga histórica)");
 
             List<String> keysPvu = new ArrayList<>();
             for (JSONObject u : pvus) keysPvu.add(u.getString("key"));
@@ -396,6 +409,8 @@ public class SyncCalistenia {
                     .put("key_caja", cajaSerp.getJSONObject("data").getString("key")).put("key_almacen", suc.getString("key_almacen")).put("key_moneda", cfg.getString("key_moneda"))
                     .put("detalle", new JSONArray().put(detalle)).put("suscripciones", new JSONArray(suscriptores.toString()))
                     .put("tipos_pago", tipos_pago);
+            if (fechaContable != null) data.put("fecha_contable", fechaContable)
+                    .put("observacion", "Sistema antiguo Calistenia · venta " + pv.getString("key").substring(0, 8).toUpperCase() + " · carga histórica del " + pv.getString("fecha_on").substring(0, 10));
             JSONObject r = SocketCliente.sendSinc("caja", new JSONObject().put("component", "caja_detalle").put("type", "venta").put("estado", "cargando").put("data", data), 60000);
             if (r == null) throw new Exception("Sin respuesta del servicio caja");
             if ("error".equals(r.optString("estado"))) throw new Exception("caja: " + r.optString("error", "error al registrar la venta"));
@@ -1226,6 +1241,117 @@ public class SyncCalistenia {
         return out;
     }
 
+    // ===================== Carga histórica =====================
+
+    /** Ventas de Calistenia del mes (sucursales activas) que todavía no están en S-ERP, y el estado de las gestiones. */
+    static JSONObject historicoRevisar(JSONObject cfg, String mes) throws Exception {
+        if (!mes.matches("\\d{4}-\\d{2}")) throw new Exception("mes inválido (AAAA-MM)");
+        String key_empresa = cfg.getString("key_empresa");
+        JSONObject out = new JSONObject().put("mes", mes);
+        Map<String, JSONObject> porSucursal = new LinkedHashMap<>();
+        for (JSONObject v : ventasHistoricas(cfg, mes)) {
+            JSONObject f = porSucursal.computeIfAbsent(v.getString("key_sucursal"), k -> new JSONObject().put("sucursal", v.optString("sucursal")).put("ventas", 0).put("monto", 0.0)
+                    .put("ya_copiadas", 0));
+            if (v.optBoolean("copiada")) f.put("ya_copiadas", f.getInt("ya_copiadas") + 1);
+            else f.put("ventas", f.getInt("ventas") + 1).put("monto", round(f.getDouble("monto") + v.optDouble("monto", 0)));
+        }
+        out.put("sucursales", new JSONArray(porSucursal.values()));
+        try (Connection conta = conServicio("contabilidad")) {
+            out.put("gestion_mes", uno(conta, "select key, estado, fecha::text as fecha, (select max(fecha)::text from asiento_contable a where a.key_gestion = g.key and a.estado > 0) as ultimo_comprobante "
+                    + "from gestion g where key_empresa = ? and to_char(fecha, 'YYYY-MM') = ? and estado > 0 order by fecha_on limit 1", key_empresa, mes));
+            out.put("gestion_abierta", uno(conta, "select key, fecha::text as fecha from gestion where key_empresa = ? and estado = 2 limit 1", key_empresa));
+        }
+        out.put("fecha_contable", ultimoDia(mes) + " 23:59:59");
+        return out;
+    }
+
+    /**
+     * Carga un mes: abre su gestión (la crea si no existe), registra cada venta con fecha contable del último día del
+     * mes y SIEMPRE vuelve a abrir la gestión que estaba abierta. Mientras dura, S-ERP no puede vender (una sola gestión).
+     */
+    static JSONObject historicoCargar(JSONObject cfg, String mes, String key_usuario) throws Exception {
+        if (!mes.matches("\\d{4}-\\d{2}")) throw new Exception("mes inválido (AAAA-MM)");
+        if (mes.compareTo(LocalDate.now(BO).toString().substring(0, 7)) >= 0) throw new Exception("Solo meses anteriores al actual");
+        String key_empresa = cfg.getString("key_empresa");
+        synchronized (("sync_cal:" + key_empresa).intern()) {
+            List<JSONObject> ventas = new ArrayList<>();
+            for (JSONObject v : ventasHistoricas(cfg, mes)) if (!v.optBoolean("copiada")) ventas.add(v);
+            if (ventas.isEmpty()) return new JSONObject().put("cargadas", 0).put("errores", 0).put("mensaje", "No hay ventas pendientes en ese mes");
+            String fechaContable = ultimoDia(mes) + " 23:59:59";
+            String abierta, delMes;
+            try (Connection conta = conServicio("contabilidad")) {
+                JSONObject a = uno(conta, "select key from gestion where key_empresa = ? and estado = 2 limit 1", key_empresa);
+                if (a == null) throw new Exception("La empresa no tiene una gestión abierta");
+                abierta = a.getString("key");
+                JSONObject g = uno(conta, "select key from gestion where key_empresa = ? and to_char(fecha, 'YYYY-MM') = ? and estado > 0 order by fecha_on limit 1", key_empresa, mes);
+                if (g == null) {
+                    delMes = UUID.randomUUID().toString();
+                    ejecutar(conta, "insert into gestion (key, key_usuario, fecha_on, estado, fecha, key_empresa, descripcion) values (?, ?, now(), 1, ?::timestamp, ?, 'Creada por la carga histórica')",
+                            delMes, key_usuario, mes + "-01", key_empresa);
+                } else delMes = g.getString("key");
+                // Abrir la del mes (cierra la actual mientras dura la carga).
+                ejecutar(conta, "update gestion set estado = 1 where key_empresa = ? and estado = 2", key_empresa);
+                ejecutar(conta, "update gestion set estado = 2 where key = ?", delMes);
+            }
+            int ok = 0, errores = 0;
+            String ultimoError = null;
+            try {
+                for (JSONObject v : ventas) {
+                    evento(key_empresa, ORIGEN_CAL, "venta", v.getString("key"), new JSONObject().put("historico", mes), 0, false);
+                    JSONObject ev = consulta("select to_json(e) as json from sync_cal_evento e where e.key_empresa = ? and e.origen = 'calistenia' and e.tipo = 'venta' and e.key_origen = ? and e.estado > 0",
+                            key_empresa, v.getString("key"));
+                    if ("HECHO".equals(ev.optString("state"))) continue;
+                    try {
+                        String destino = ventaCal(cfg, ev, fechaContable);
+                        actualizar("update sync_cal_evento set state = 'HECHO', key_destino = ?, error = null, fecha_proceso = now(), data = ?::json where key = ?", destino,
+                                new JSONObject().put("historico", mes).toString(), ev.getString("key"));
+                        ok++;
+                    } catch (Omitir e) {
+                        actualizar("update sync_cal_evento set state = 'OMITIDO', error = ?, fecha_proceso = now() where key = ?", recortar(e.getMessage(), 250), ev.getString("key"));
+                    } catch (Exception e) {
+                        errores++;
+                        ultimoError = v.getString("key").substring(0, 8) + ": " + e.getMessage();
+                        actualizar("update sync_cal_evento set state = 'REVISAR', intentos = intentos + 1, error = ?, fecha_proceso = now() where key = ?",
+                                recortar("Carga histórica " + mes + ": " + e.getMessage(), 250), ev.getString("key"));
+                    }
+                }
+            } finally {
+                // Volver a abrir la gestión que estaba abierta, pase lo que pase.
+                try (Connection conta = conServicio("contabilidad")) {
+                    ejecutar(conta, "update gestion set estado = 1 where key_empresa = ? and estado = 2", key_empresa);
+                    ejecutar(conta, "update gestion set estado = 2 where key = ?", abierta);
+                }
+            }
+            return new JSONObject().put("cargadas", ok).put("errores", errores).put("ultimo_error", ultimoError == null ? JSONObject.NULL : ultimoError)
+                    .put("fecha_contable", fechaContable);
+        }
+    }
+
+    /** Ventas de Calistenia del mes en las sucursales activas del sync (cajas propias, no anuladas). */
+    static List<JSONObject> ventasHistoricas(JSONObject cfg, String mes) throws Exception {
+        String key_empresa = cfg.getString("key_empresa");
+        String[] sucs = columna("select key_sucursal_cal as json from sync_cal_sucursal where key_empresa = ? and estado > 0 and activo", key_empresa);
+        java.util.Set<String> copiadas = new java.util.HashSet<>(java.util.Arrays.asList(columna(
+                "select key_origen as json from sync_cal_evento where key_empresa = ? and origen = 'calistenia' and tipo = 'venta' and state = 'HECHO' and estado > 0", key_empresa)));
+        List<JSONObject> out = new ArrayList<>();
+        if (sucs.length == 0) return out;
+        try (Connection cal = conCal(cfg)) {
+            for (JSONObject v : q(cal, "select distinct on (pv.key) pv.key, pv.monto, pv.fecha_on::text as fecha_on, c.key_sucursal, trim(s.descripcion) as sucursal "
+                    + "from paquete_venta pv join paquete_venta_usuario u on u.key_paquete_venta = pv.key and u.estado > 0 join caja c on c.key = u.key_caja "
+                    + "join sucursal s on s.key = c.key_sucursal where pv.estado > 0 and coalesce(pv.is_server_serp, false) = false and coalesce(c.tipo, '') <> 'serp' "
+                    + "and to_char(pv.fecha_on, 'YYYY-MM') = ? and c.key_sucursal = any(?) order by pv.key, u.fecha_on", mes, cal.createArrayOf("varchar", sucs))) {
+                v.put("copiada", copiadas.contains(v.getString("key")));
+                out.add(v);
+            }
+        }
+        out.sort((a, b) -> a.getString("fecha_on").compareTo(b.getString("fecha_on")));
+        return out;
+    }
+
+    static String ultimoDia(String mes) {
+        return LocalDate.parse(mes + "-01").plusMonths(1).minusDays(1).toString();
+    }
+
     // ===================== Infra =====================
 
     static void evento(String key_empresa, String origen, String tipo, String key_origen, JSONObject data, int segundos, boolean rearmar) throws Exception {
@@ -1265,7 +1391,8 @@ public class SyncCalistenia {
 
     /** Bases de los demás servicios de S-ERP (red interna). Se puede cambiar con "sync_calistenia_dbs" en config.json. */
     static Connection conServicio(String servicio) throws Exception {
-        JSONObject def = new JSONObject().put("caja", "192.168.5.45").put("compra_venta", "192.168.5.41").put("inventario", "192.168.5.39").put("crm", "192.168.5.51");
+        JSONObject def = new JSONObject().put("caja", "192.168.5.45").put("compra_venta", "192.168.5.41").put("inventario", "192.168.5.39").put("crm", "192.168.5.51")
+                .put("contabilidad", "192.168.5.11");
         JSONObject cfg = null;
         try {
             cfg = SConfig.getJSON().optJSONObject("sync_calistenia_dbs");
