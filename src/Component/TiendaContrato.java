@@ -272,9 +272,10 @@ public class TiendaContrato {
             double mto = cb.getDouble("monto");
             String ref = "Ref: Cybersource " + pago.optString("cybs_id") + (pago.optString("aprobacion").isEmpty() ? "" : " · Aut " + pago.optString("aprobacion"))
                     + (pago.optString("tarjeta").isEmpty() ? "" : " · " + pago.optString("tarjeta")) + " · cuota " + cb.getInt("numero") + "/" + k.getInt("cuotas");
+            // tipo "venta": sin él compra_venta lo asienta como pago a proveedor (egreso con debe/haber invertidos).
             JSONObject req = new JSONObject().put("component", "caja_detalle").put("type", "amortizarCuotaCompra").put("estado", "cargando")
                     .put("key_usuario", key_usuario).put("key_empresa", key_empresa).put("key_caja", cajaAutomatica(t))
-                    .put("data", new JSONObject().put("key_compra_venta", k.getString("key_compra_venta")).put("cuotas", new JSONArray().put(cu.getString("key")))
+                    .put("data", new JSONObject().put("tipo", "venta").put("key_compra_venta", k.getString("key_compra_venta")).put("cuotas", new JSONArray().put(cu.getString("key")))
                             .put("tipos_pago", new JSONObject().put(t.getString("key_empresa_tipo_pago"), new JSONObject()
                                     .put("monto_nacional", mto).put("monto_extranjera", mto).put("referencia", ref)
                                     .put("pago_tarjeta", new JSONObject().put("key", pago.getString("key"))))));

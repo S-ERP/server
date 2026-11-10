@@ -31,6 +31,8 @@ import SocketCliente.SocketCliente;
  *   caja_cobrar     (miembro)   {data:{monto, descripcion, cliente?, key_solicitud?}} -> link con url y qr para cobrar una venta
  *   caja_estado     (miembro)   {key} -> estado del link (solo de la propia empresa)
  *   caja_anular     (miembro)   {key} -> anula un link no pagado (el cliente no llegó a pagar)
+ *   liq_*           configurar  liquidaciones de Linkser (ver LiquidacionLinkser): liq_config_guardar, liq_pendientes,
+ *                               liq_lista, liq_detalle {key}, liq_registrar {data}, liq_anular {key, motivo}
  *
  * Permisos en roles_permisos: PAGE ver, new, delete, configurar.
  */
@@ -95,6 +97,31 @@ public class CyberSource {
                     exigir(permisos, "configurar");
                     resp = llamar(req.put("component", "comercio").put("type", "probar"));
                     break;
+                // ---- Liquidaciones de Linkser (conciliación de depósitos) ----
+                case "liq_config_guardar":
+                    exigir(permisos, "configurar");
+                    resp = exito(LiquidacionLinkser.guardarConfig(key_empresa, key_usuario, obj.getJSONObject("data")));
+                    break;
+                case "liq_pendientes":
+                    exigir(permisos, "configurar");
+                    resp = exito(LiquidacionLinkser.pendientes(key_empresa));
+                    break;
+                case "liq_lista":
+                    exigir(permisos, "configurar");
+                    resp = exito(LiquidacionLinkser.lista(key_empresa));
+                    break;
+                case "liq_detalle":
+                    exigir(permisos, "configurar");
+                    resp = exito(LiquidacionLinkser.detalle(obj.getString("key"), key_empresa));
+                    break;
+                case "liq_registrar":
+                    exigir(permisos, "configurar");
+                    resp = exito(LiquidacionLinkser.registrar(key_empresa, key_usuario, obj.getJSONObject("data")));
+                    break;
+                case "liq_anular":
+                    exigir(permisos, "configurar");
+                    resp = exito(LiquidacionLinkser.anular(obj.getString("key"), key_empresa, key_usuario, obj.optString("motivo")));
+                    break;
                 default:
                     throw new Exception("type no soportado: " + obj.getString("type"));
             }
@@ -106,6 +133,10 @@ public class CyberSource {
             obj.put("estado", "error");
             obj.put("error", e.getMessage());
         }
+    }
+
+    private static JSONObject exito(Object data) {
+        return new JSONObject().put("estado", "exito").put("data", data);
     }
 
     static JSONObject llamar(JSONObject req) throws Exception {
