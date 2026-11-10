@@ -65,9 +65,12 @@ public abstract class Rest {
         t.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
         if (t.getRequestMethod().equalsIgnoreCase("OPTIONS")) {
             t.getResponseHeaders().add("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
-            // algo
             t.getResponseHeaders().add("Access-Control-Allow-Headers", "*");
-            t.sendResponseHeaders(200, 0);
+            t.getResponseHeaders().add("Access-Control-Max-Age", "86400");
+            // Preflight sin cuerpo: 204 con largo -1 y cerrar. Con (200, 0) Java espera un cuerpo "chunked" que nunca
+            // se cerraba y el navegador quedaba esperando hasta que nginx cortaba a los 60 s.
+            t.sendResponseHeaders(204, -1);
+            t.close();
             return;
         }
         Response response = new Response();

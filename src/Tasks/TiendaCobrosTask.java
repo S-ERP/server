@@ -28,17 +28,26 @@ public class TiendaCobrosTask extends Thread {
                 int hora = LocalTime.now(ZoneId.of("America/La_Paz")).getHour();
                 boolean cobrarNuevos = hora >= 8 && hora < 20;
                 JSONArray keys = TiendaContrato.pendientes();
+                int procesados = 0, errores = 0;
+                String ultimoError = null;
                 for (int i = 0; i < keys.length(); i++) {
                     try {
-                        if (cobrarNuevos || TiendaContrato.soloRegistrar(keys.getString(i))) TiendaContrato.procesar(keys.getString(i), false);
+                        if (cobrarNuevos || TiendaContrato.soloRegistrar(keys.getString(i))) {
+                            TiendaContrato.procesar(keys.getString(i), false);
+                            procesados++;
+                        }
                     } catch (Exception e) {
+                        errores++;
+                        ultimoError = "Cobro " + keys.getString(i).substring(0, 8) + ": " + e.getMessage();
                         System.out.println("TiendaCobrosTask " + keys.getString(i) + ": " + e.getMessage());
                     }
                 }
+                Component.Tienda.registrarTarea("cobros", procesados, errores, ultimoError);
             } catch (InterruptedException e) {
                 return;
             } catch (Exception e) {
                 e.printStackTrace();
+                Component.Tienda.registrarTarea("cobros", 0, 1, "La pasada falló: " + e.getMessage());
             }
         }
     }

@@ -78,3 +78,13 @@ alter table tienda_cobro add column if not exists key_caja_detalle varchar;
 alter table tienda_orden add column if not exists fecha_anulacion timestamp;
 alter table tienda_orden add column if not exists motivo_anulacion varchar;
 alter table tienda_orden add column if not exists key_usuario_anulacion varchar;
+
+-- Última pasada de cada tarea (TiendaTask = órdenes, TiendaCobrosTask = cobros): los paneles avisan si se atrasa.
+create table if not exists tienda_tarea (
+    nombre varchar primary key,
+    ultima_ejecucion timestamp,
+    procesados integer default 0,
+    errores integer default 0,
+    ultimo_error varchar,
+    fecha_ultimo_error timestamp
+);

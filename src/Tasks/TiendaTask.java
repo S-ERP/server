@@ -22,17 +22,23 @@ public class TiendaTask extends Thread {
             try {
                 Thread.sleep(60 * 1000);
                 JSONArray keys = Tienda.pendientesPublico();
+                int errores = 0;
+                String ultimoError = null;
                 for (int i = 0; i < keys.length(); i++) {
                     try {
                         Tienda.procesarPublico(keys.getString(i));
                     } catch (Exception e) {
+                        errores++;
+                        ultimoError = "Orden " + keys.getString(i).substring(0, 8) + ": " + e.getMessage();
                         e.printStackTrace();
                     }
                 }
+                Tienda.registrarTarea("ordenes", keys.length(), errores, ultimoError);
             } catch (InterruptedException e) {
                 return;
             } catch (Exception e) {
                 e.printStackTrace();
+                Tienda.registrarTarea("ordenes", 0, 1, "La pasada falló: " + e.getMessage());
             }
         }
     }

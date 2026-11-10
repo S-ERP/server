@@ -50,6 +50,10 @@ public class Tienda {
                     CyberSource.exigirPermiso(permisos, "configurar");
                     obj.put("data", opciones(key_empresa, key_usuario));
                     break;
+                case "estado_tareas":
+                    CyberSource.exigirPermiso(permisos, "ver");
+                    obj.put("data", estadoTareas(key_empresa));
+                    break;
                 case "ordenes":
                     CyberSource.exigirPermiso(permisos, "ver");
                     obj.put("data", ordenes(key_empresa, obj.optString("desde", ""), obj.optString("hasta", "")));
@@ -537,6 +541,35 @@ public class Tienda {
     }
 
     // ===================== internos =====================
+
+    /** Las tareas anotan cada pasada (los paneles avisan si una deja de correr o falla). */
+    public static void registrarTarea(String nombre, int procesados, int errores, String ultimoError) {
+        try {
+            actualizar("insert into tienda_tarea (nombre, ultima_ejecucion, procesados, errores, ultimo_error, fecha_ultimo_error) values (?, now(), ?::integer, ?::integer, ?, case when ? is null then null else now() end) "
+                    + "on conflict (nombre) do update set ultima_ejecucion = now(), procesados = excluded.procesados, errores = excluded.errores, "
+                    + "ultimo_error = coalesce(excluded.ultimo_error, tienda_tarea.ultimo_error), fecha_ultimo_error = coalesce(excluded.fecha_ultimo_error, tienda_tarea.fecha_ultimo_error)",
+                    nombre, String.valueOf(procesados), String.valueOf(errores), recortar(ultimoError, 250), ultimoError);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    /** Estado de las tareas y cobros a revisar, para el aviso de los paneles. atrasada = más de 25 min sin correr. */
+    static JSONObject estadoTareas(String key_empresa) throws Exception {
+        JSONObject out = new JSONObject();
+        for (String n : new String[] { "cobros", "ordenes" }) {
+            JSONObject r = consulta("select json_build_object('ultima_ejecucion', ultima_ejecucion, 'procesados', procesados, 'errores', errores, "
+                    + "'ultimo_error', ultimo_error, 'fecha_ultimo_error', fecha_ultimo_error, 'atrasada', ultima_ejecucion < now() - interval '25 minutes')::text as json "
+                    + "from tienda_tarea where nombre = ?", n);
+            out.put(n, r.isEmpty() ? new JSONObject().put("atrasada", true).put("nunca", true) : r);
+        }
+        JSONObject c = consulta("select json_build_object("
+                + "'inciertos', count(*) filter (where c.state = 'INCIERTO'), "
+                + "'sin_registrar', count(*) filter (where c.state = 'COBRADO' and c.fecha_on < now() - interval '1 hour'), "
+                + "'en_mora', count(*) filter (where c.state = 'MORA'))::text as json "
+                + "from tienda_cobro c join tienda_contrato k on k.key = c.key_contrato where c.key_empresa = ? and c.estado > 0 and k.state in ('ACTIVO','MOROSO')", key_empresa);
+        return out.put("cobros_revisar", c);
+    }
 
     /** Para Tasks.TiendaTask. */
     public static JSONArray pendientesPublico() throws Exception { return pendientes(); }
