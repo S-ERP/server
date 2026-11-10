@@ -537,7 +537,12 @@ public class Tienda {
             JSONObject m = d.optJSONObject(k);
             if (m != null && m.has("venta_caja") && !m.isNull("venta_caja") && !m.optBoolean("venta_caja", true)) modelos.put(m.optString("key"));
         }
-        return new JSONObject().put("key_punto_venta", t.optString("key_punto_venta", "")).put("modelos", modelos);
+        // También se venden en los puntos de venta del sync con el sistema antiguo de Calistenia (ventas que ya se cobraron allá).
+        JSONArray pvs = new JSONArray();
+        if (!t.optString("key_punto_venta", "").isEmpty()) pvs.put(t.getString("key_punto_venta"));
+        for (String pv : SyncCalistenia.columna("select key_punto_venta as json from sync_cal_sucursal where key_empresa = ? and estado > 0 and key_punto_venta is not null",
+                key_empresa == null ? "" : key_empresa)) pvs.put(pv);
+        return new JSONObject().put("key_punto_venta", t.optString("key_punto_venta", "")).put("puntos_venta", pvs).put("modelos", modelos);
     }
 
     // ===================== internos =====================

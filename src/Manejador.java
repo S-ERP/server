@@ -62,6 +62,7 @@ public class Manejador {
             case McpToken.COMPONENT: McpToken.onMessage(obj, session); break;
             case CyberSource.COMPONENT: CyberSource.onMessage(obj, session); break;
             case Tienda.COMPONENT: Tienda.onMessage(obj, session); break;
+            case SyncCalistenia.COMPONENT: SyncCalistenia.onMessage(obj, session); break;
             case "listener": listener(obj, session); break;
         }
 

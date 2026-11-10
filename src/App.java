@@ -9,6 +9,7 @@ import Tasks.EmpresaTask;
 import Tasks.TareaTask;
 import Tasks.TiendaTask;
 import Tasks.TiendaCobrosTask;
+import Tasks.SyncCalisteniaTask;
 import Tasks.ZKTecoTask;
 
 public class App {
@@ -29,6 +30,7 @@ public class App {
             new ZKTecoTask();
             new TiendaTask();
             new TiendaCobrosTask();
+            new SyncCalisteniaTask();
             Servisofts.initialize();
 
         } catch (Exception e) {
