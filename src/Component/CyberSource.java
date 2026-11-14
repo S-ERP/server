@@ -25,6 +25,8 @@ import SocketCliente.SocketCliente;
  *   pagos           ver         {desde?, hasta?, state?} -> links de pago de la empresa
  *   link_registro   new         {data:{monto, descripcion, cliente?, key_solicitud?}} -> link con url
  *   link_anular     delete      {key}
+ *   link_cobrar_token configurar {key (link pagado con tarjeta guardada), monto <= 10, key_solicitud?} -> cobro automático de prueba
+ *   link_reembolsar configurar  {key} -> devuelve un pago que ninguna venta usó
  *   config_get      configurar  -> configuración sin el Shared Secret
  *   config_guardar  configurar  {data:{descripcion, merchant_id, ambiente, cybs_key, cybs_secret?, razon_social, rubro, activo}}
  *   config_probar   configurar  -> prueba las credenciales contra Cybersource
@@ -63,12 +65,34 @@ public class CyberSource {
                     break;
                 case "link_registro":
                     exigir(permisos, "new");
+                    if (obj.getJSONObject("data").optBoolean("guardar_tarjeta")) exigir(permisos, "configurar");
                     resp = llamar(req.put("component", "link_pago").put("type", "registro").put("data", obj.getJSONObject("data")));
                     break;
                 case "link_anular":
                     exigir(permisos, "delete");
                     resp = llamar(req.put("component", "link_pago").put("type", "anular").put("key", obj.getString("key")));
                     break;
+                // Prueba de débito automático desde el panel (p. ej. la prueba final de Linkser en producción): cobra un monto
+                // chico con la tarjeta guardada de un link pagado. Los cobros reales de cuotas los hace TiendaContrato.
+                case "link_cobrar_token": {
+                    exigir(permisos, "configurar");
+                    double monto = obj.getDouble("monto");
+                    if (!(monto > 0 && monto <= 10)) throw new Exception("Desde el panel solo se permiten cobros de prueba de hasta Bs 10");
+                    String solicitud = obj.optString("key_solicitud", "");
+                    resp = llamar(req.put("component", "link_pago").put("type", "cobrar_token").put("key_tarjeta", obj.getString("key")).put("monto", monto)
+                            .put("descripcion", "Prueba de cobro automático").put("key_solicitud", solicitud.isEmpty() ? java.util.UUID.randomUUID().toString() : solicitud));
+                    break;
+                }
+                // Devuelve un pago que ninguna venta usó (prueba, cobro por error). Si está en una venta se devuelve anulando la venta.
+                case "link_reembolsar": {
+                    exigir(permisos, "configurar");
+                    JSONObject t = llamar(new JSONObject().put("component", "link_pago").put("type", "getByKey").put("key", obj.getString("key")).put("key_empresa", key_empresa));
+                    if (!"exito".equals(t.optString("estado"))) throw new Exception(t.optString("error", "Pago no encontrado"));
+                    if (!t.getJSONObject("data").optString("consumido_por", "").isEmpty())
+                        throw new Exception("Este pago está registrado en una venta: devuélvalo anulando la venta");
+                    resp = llamar(req.put("component", "link_pago").put("type", "reembolsar").put("key", obj.getString("key")).put("referencia", "panel"));
+                    break;
+                }
                 // Cobro de una venta desde caja: cualquier usuario activo de la empresa (el cajero), sin permisos de /cybersource.
                 case "caja_cobrar": {
                     JSONObject d = obj.getJSONObject("data");
